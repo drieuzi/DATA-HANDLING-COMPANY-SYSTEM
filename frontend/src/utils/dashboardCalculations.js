@@ -8,11 +8,10 @@ export function normalizeDashboardData(data) {
     totalSales: toNumber(data.totalSales),
     receivables: toNumber(data.receivables),
     payables: toNumber(data.payables),
-    chequeTotal: toNumber(data.chequeTotal),
     monthlyExpenses: Array.isArray(data.monthlyExpenses)
       ? data.monthlyExpenses.map((item) => ({
           month: String(item.month || ""),
-          companyTransactions: toNumber(item.companyTransactions),
+          payables: toNumber(item.payables),
           outsideServices: toNumber(item.outsideServices)
         }))
       : []
@@ -22,12 +21,11 @@ export function normalizeDashboardData(data) {
 export function calculatePurchaseTotals(monthlyExpenses) {
   return monthlyExpenses.reduce(
     (totals, month) => ({
-      companyTransactions: totals.companyTransactions + month.companyTransactions,
+      payablePurchases: totals.payablePurchases + month.payables,
       outsideServices: totals.outsideServices + month.outsideServices,
-      totalPurchases:
-        totals.totalPurchases + month.companyTransactions + month.outsideServices
+      totalExpenses: totals.totalExpenses + month.payables + month.outsideServices
     }),
-    { companyTransactions: 0, outsideServices: 0, totalPurchases: 0 }
+    { payablePurchases: 0, outsideServices: 0, totalExpenses: 0 }
   );
 }
 

@@ -23,8 +23,8 @@ export default function PurchaseDialog({ isOpen, totals, onClose }) {
     >
       <div className="purchase-dialog__header">
         <div>
-          <p>Purchase summary</p>
-          <h2>Total Purchase</h2>
+          <p>Supplier purchase summary</p>
+          <h2>Monthly Purchase</h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Close purchase summary">
           ×
@@ -33,18 +33,14 @@ export default function PurchaseDialog({ isOpen, totals, onClose }) {
 
       <dl className="purchase-breakdown">
         <div>
-          <dt>Transactions with other companies</dt>
-          <dd>{formatCurrency(totals.companyTransactions)}</dd>
-        </div>
-        <div>
-          <dt>Outside service purchases</dt>
-          <dd>{formatCurrency(totals.outsideServices)}</dd>
-        </div>
-        <div className="purchase-breakdown__total">
-          <dt>Combined total</dt>
-          <dd>{formatCurrency(totals.totalPurchases)}</dd>
+          <dt>Total supplier payables</dt>
+          <dd>{formatCurrency(totals.payablePurchases)}</dd>
         </div>
       </dl>
+
+      <p className="purchase-dialog__note">
+        Outside-service expenses are calculated separately in Monthly Expenses Analytics.
+      </p>
     </dialog>
   );
 }

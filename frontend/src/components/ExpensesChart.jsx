@@ -14,7 +14,7 @@ function compactCurrency(value) {
 
 export default function ExpensesChart({ monthlyExpenses }) {
   const totals = monthlyExpenses.map(
-    (item) => item.companyTransactions + item.outsideServices
+    (item) => item.payables + item.outsideServices
   );
   const maximum = Math.max(...totals, 1);
   const availableWidth = CHART_RIGHT - CHART_LEFT;
@@ -44,11 +44,11 @@ export default function ExpensesChart({ monthlyExpenses }) {
 
         {monthlyExpenses.map((item, index) => {
           const centerX = CHART_LEFT + slotWidth * index + slotWidth / 2;
-          const companyHeight = (item.companyTransactions / maximum) * chartHeight;
+          const payablesHeight = (item.payables / maximum) * chartHeight;
           const servicesHeight = (item.outsideServices / maximum) * chartHeight;
-          const companyY = CHART_BOTTOM - companyHeight;
-          const servicesY = companyY - servicesHeight;
-          const total = item.companyTransactions + item.outsideServices;
+          const payablesY = CHART_BOTTOM - payablesHeight;
+          const servicesY = payablesY - servicesHeight;
+          const total = item.payables + item.outsideServices;
 
           return (
             <g key={item.month}>
@@ -56,11 +56,11 @@ export default function ExpensesChart({ monthlyExpenses }) {
                 {`${item.month}: ₱${total.toLocaleString("en-PH")} total expenses`}
               </title>
               <rect
-                className="chart-bar chart-bar--company"
+                className="chart-bar chart-bar--payables"
                 x={centerX - barWidth / 2}
-                y={companyY}
+                y={payablesY}
                 width={barWidth}
-                height={companyHeight}
+                height={payablesHeight}
                 rx="4"
               />
               <rect
@@ -84,7 +84,7 @@ export default function ExpensesChart({ monthlyExpenses }) {
       </div>
 
       <div className="chart-legend" aria-label="Expense chart legend">
-        <span><i className="legend-company" />Company transactions</span>
+        <span><i className="legend-payables" />Supplier payables</span>
         <span><i className="legend-services" />Outside services</span>
       </div>
     </div>

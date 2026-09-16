@@ -17,7 +17,7 @@ const MODULE_LABELS = {
   receivables: "Receivables",
   payables: "Payables",
   sales: "Total Sales",
-  cheques: "Cheque",
+  cheques: "Voucher Cheque",
   analytics: "Monthly Expenses Analytics"
 };
 
@@ -110,6 +110,20 @@ export default function DashboardPage({ user, onLogout, onOpenSuppliers }) {
             Monthly Expenses Analytics
           </button>
           <ExpensesChart monthlyExpenses={dashboardData.monthlyExpenses} />
+          <div className="analytics-totals" aria-label="Expense analytics totals">
+            <div>
+              <span>Supplier Payables</span>
+              <strong>{formatCurrency(purchaseTotals.payablePurchases)}</strong>
+            </div>
+            <div>
+              <span>Outside Services</span>
+              <strong>{formatCurrency(purchaseTotals.outsideServices)}</strong>
+            </div>
+            <div>
+              <span>Total Expenses</span>
+              <strong>{formatCurrency(purchaseTotals.totalExpenses)}</strong>
+            </div>
+          </div>
         </section>
 
         <section className="totals-card" aria-label="Sales and purchase summaries">
@@ -122,15 +136,14 @@ export default function DashboardPage({ user, onLogout, onOpenSuppliers }) {
           <DashboardCard
             className="summary-card"
             label="Total Purchase"
-            value={formatCurrency(purchaseTotals.totalPurchases)}
+            value={formatCurrency(purchaseTotals.payablePurchases)}
             onClick={() => setPurchaseDialogOpen(true)}
           />
         </section>
 
         <DashboardCard
           className="cheque-card"
-          label="Cheque"
-          value={formatCurrency(dashboardData.chequeTotal)}
+          label="Voucher Cheque"
           onClick={() => openFutureModule("cheques")}
         />
       </main>

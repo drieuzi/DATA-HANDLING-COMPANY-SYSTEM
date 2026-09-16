@@ -11,11 +11,10 @@ const USE_DEMO_DATA = import.meta.env.VITE_USE_DEMO_DATA !== "false";
     "totalSales": 0,
     "receivables": 0,
     "payables": 0,
-    "chequeTotal": 0,
     "monthlyExpenses": [
       {
         "month": "Jan",
-        "companyTransactions": 0,
+        "payables": 0,
         "outsideServices": 0
       }
     ]

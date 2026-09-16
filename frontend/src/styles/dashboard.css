@@ -145,7 +145,7 @@
   stroke-width: 6;
 }
 
-.chart-bar--company {
+.chart-bar--payables {
   fill: var(--black);
 }
 
@@ -196,8 +196,44 @@
   border-radius: 3px;
 }
 
-.legend-company {
+.legend-payables {
   background: var(--black);
+}
+
+.analytics-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.analytics-totals div {
+  min-width: 0;
+  padding: 9px 8px;
+  border-radius: 14px;
+  background: var(--white);
+  text-align: center;
+}
+
+.analytics-totals span,
+.analytics-totals strong {
+  display: block;
+}
+
+.analytics-totals span {
+  min-height: 24px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.analytics-totals strong {
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .legend-services {
@@ -321,6 +357,14 @@
   font-size: 1.12rem;
 }
 
+.purchase-dialog__note {
+  margin: -5px 24px 24px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+}
+
 @media (max-width: 860px) {
   .dashboard {
     grid-template-columns: 1fr;
@@ -360,6 +404,14 @@
   .analytics-card {
     padding: 16px 12px 12px;
     border-radius: 30px;
+  }
+
+  .analytics-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-totals span {
+    min-height: 0;
   }
 
   .totals-card {
