@@ -5,6 +5,8 @@ import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SupplierDetailsPage from "./pages/SupplierDetailsPage.jsx";
 import ClientsPage from "./pages/ClientsPage.jsx";
 import ClientDetailsPage from "./pages/ClientDetailsPage.jsx";
+import PayablesPage from "./pages/PayablesPage.jsx";
+import ReceivablesPage from "./pages/ReceivablesPage.jsx";
 import { demoSuppliers } from "./data/demoSuppliers.js";
 import { demoClients } from "./data/demoClients.js";
 
@@ -73,6 +75,24 @@ export default function App() {
     );
   }
 
+  if (currentPage === "payables") {
+    return (
+      <PayablesPage
+        suppliers={demoSuppliers}
+        onBack={() => setCurrentPage("dashboard")}
+      />
+    );
+  }
+
+  if (currentPage === "receivables") {
+    return (
+      <ReceivablesPage
+        clients={demoClients}
+        onBack={() => setCurrentPage("dashboard")}
+      />
+    );
+  }
+
   if (currentPage === "supplier-details" && selectedSupplier) {
     return (
       <SupplierDetailsPage
@@ -97,6 +117,8 @@ export default function App() {
       onLogout={handleLogout}
       onOpenClients={() => setCurrentPage("clients")}
       onOpenSuppliers={() => setCurrentPage("suppliers")}
+      onOpenPayables={() => setCurrentPage("payables")}
+      onOpenReceivables={() => setCurrentPage("receivables")}
     />
   );
 }

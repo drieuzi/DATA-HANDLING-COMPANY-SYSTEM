@@ -1,0 +1,81 @@
+.financial-records-page {
+  background: var(--yellow);
+}
+
+.financial-records-main {
+  width: min(1180px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: 52px 0 58px;
+}
+
+.financial-records-card {
+  overflow: hidden;
+  padding: 48px 26px;
+  border-radius: 28px;
+  background: var(--peach-strong);
+}
+
+.financial-table-wrapper {
+  overflow-x: auto;
+  border: 2px solid var(--black);
+}
+
+.financial-record-table {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  background: var(--peach-strong);
+  table-layout: fixed;
+}
+
+.financial-record-table th,
+.financial-record-table td {
+  height: 65px;
+  padding: 11px 9px;
+  border-right: 2px solid var(--black);
+  border-bottom: 2px solid var(--black);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.financial-record-table th:last-child,
+.financial-record-table td:last-child {
+  border-right: 0;
+}
+
+.financial-record-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.financial-record-table th {
+  height: 64px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.financial-record-table td {
+  font-size: 0.78rem;
+}
+
+.financial-record-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.financial-records-empty {
+  height: 120px !important;
+  font-weight: 800;
+}
+
+@media (max-width: 560px) {
+  .financial-records-main {
+    width: min(100% - 24px, 520px);
+    padding: 30px 0 40px;
+  }
+
+  .financial-records-card {
+    padding: 24px 14px;
+    border-radius: 23px;
+  }
+}

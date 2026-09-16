@@ -21,7 +21,14 @@ const MODULE_LABELS = {
   analytics: "Monthly Expenses Analytics"
 };
 
-export default function DashboardPage({ user, onLogout, onOpenClients, onOpenSuppliers }) {
+export default function DashboardPage({
+  user,
+  onLogout,
+  onOpenClients,
+  onOpenSuppliers,
+  onOpenPayables,
+  onOpenReceivables
+}) {
   const [dashboardData, setDashboardData] = useState(() =>
     normalizeDashboardData(demoDashboardData)
   );
@@ -91,12 +98,12 @@ export default function DashboardPage({ user, onLogout, onOpenClients, onOpenSup
           <DashboardCard
             label="Receivable"
             value={formatCurrency(dashboardData.receivables)}
-            onClick={() => openFutureModule("receivables")}
+            onClick={onOpenReceivables}
           />
           <DashboardCard
             label="Payables"
             value={formatCurrency(dashboardData.payables)}
-            onClick={() => openFutureModule("payables")}
+            onClick={onOpenPayables}
           />
         </section>
 

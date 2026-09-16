@@ -6,6 +6,7 @@ import "./styles/login.css";
 import "./styles/dashboard.css";
 import "./styles/suppliers.css";
 import "./styles/clients.css";
+import "./styles/financial-records.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
