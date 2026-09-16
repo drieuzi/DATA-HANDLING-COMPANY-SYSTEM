@@ -1,82 +1,28 @@
-.supplier-page {
+.client-page {
   background: var(--yellow);
 }
 
-.track-record-header {
-  position: relative;
-  display: grid;
-  min-height: 74px;
-  place-items: center;
-  padding: 14px 80px;
-  background: var(--peach-strong);
-}
-
-.track-record-header--light {
-  background: var(--yellow);
-}
-
-.track-record-header h1 {
-  margin: 0;
-  font-size: clamp(1.25rem, 3.5vw, 1.65rem);
-  font-weight: 900;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.triangle-back-button {
-  position: absolute;
-  top: 50%;
-  left: 15px;
-  display: grid;
-  width: 50px;
-  height: 50px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  transform: translateY(-50%);
-}
-
-.triangle-back-button span {
-  width: 0;
-  height: 0;
-  border-top: 19px solid transparent;
-  border-right: 34px solid var(--black);
-  border-bottom: 19px solid transparent;
-  transition: transform 160ms ease;
-}
-
-.triangle-back-button:hover span {
-  transform: translateX(-4px);
-}
-
-.supplier-list-main,
-.supplier-details-main {
-  width: min(1180px, calc(100% - 36px));
+.client-list-main {
+  width: min(760px, calc(100% - 36px));
   margin: 0 auto;
   padding: 52px 0 58px;
 }
 
-.supplier-list-main {
-  width: min(760px, calc(100% - 36px));
-}
-
-.supplier-list-card {
+.client-list-card {
   padding: 31px clamp(24px, 8vw, 70px);
   border-radius: 28px;
   background: var(--peach-strong);
 }
 
-.supplier-list-heading,
-.supplier-row {
+.client-list-heading,
+.client-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr);
   align-items: center;
   gap: 28px;
 }
 
-.supplier-list-heading {
+.client-list-heading {
   margin-bottom: 14px;
   font-size: clamp(1rem, 2.4vw, 1.35rem);
   font-weight: 900;
@@ -84,11 +30,11 @@
   text-transform: uppercase;
 }
 
-.supplier-row {
+.client-row {
   min-height: 43px;
 }
 
-.supplier-name-button {
+.client-name-button {
   justify-self: center;
   padding: 5px 13px;
   border: 0;
@@ -101,11 +47,11 @@
   cursor: pointer;
 }
 
-.supplier-name-button:hover {
+.client-name-button:hover {
   background: var(--yellow);
 }
 
-.supplier-status {
+.client-status {
   justify-self: center;
   padding: 6px 12px;
   border-radius: 999px;
@@ -115,22 +61,32 @@
   text-transform: uppercase;
 }
 
-.supplier-status--paid {
+.client-status--paid {
   color: var(--green);
 }
 
-.supplier-status--not-paid {
+.client-status--not-paid {
   color: var(--red);
 }
 
-.supplier-summary {
+.client-details-page {
+  background: var(--yellow);
+}
+
+.client-details-main {
+  width: min(1180px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: 52px 0 58px;
+}
+
+.client-information {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 15px;
   margin-bottom: 24px;
 }
 
-.supplier-summary div {
+.client-information div {
   display: flex;
   min-height: 110px;
   flex-direction: column;
@@ -140,7 +96,7 @@
   background: var(--peach-strong);
 }
 
-.supplier-summary span {
+.client-information span {
   margin-bottom: 8px;
   font-size: 0.7rem;
   font-weight: 900;
@@ -148,20 +104,22 @@
   text-transform: uppercase;
 }
 
-.supplier-summary strong {
+.client-information strong {
   overflow: hidden;
-  font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  font-weight: 900;
+  line-height: 1.25;
   text-overflow: ellipsis;
 }
 
-.supplier-transactions {
+.client-records {
   overflow: hidden;
   border-radius: 28px;
   background: var(--white);
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
 }
 
-.transactions-title-row {
+.client-records-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -170,12 +128,12 @@
   background: var(--peach-strong);
 }
 
-.transactions-title-row p,
-.transactions-title-row h2 {
+.client-records-heading p,
+.client-records-heading h2 {
   margin: 0;
 }
 
-.transactions-title-row p {
+.client-records-heading p {
   margin-bottom: 4px;
   font-size: 0.68rem;
   font-weight: 900;
@@ -183,113 +141,89 @@
   text-transform: uppercase;
 }
 
-.transactions-title-row span {
+.client-records-heading > span {
   font-size: 0.8rem;
   font-weight: 800;
 }
 
-.transactions-table-wrapper {
+.client-table-wrapper {
   overflow-x: auto;
 }
 
-.transactions-table {
+.client-record-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 900px;
   border-collapse: collapse;
+  background: var(--white);
   font-size: 0.82rem;
 }
 
-.transactions-table th,
-.transactions-table td {
+.client-record-table th,
+.client-record-table td {
   padding: 15px 13px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
   text-align: left;
   white-space: nowrap;
 }
 
-.transactions-table th {
+.client-record-table th {
   background: var(--yellow-light);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.transactions-table tbody tr:hover {
+.client-record-table td {
+  font-weight: 700;
+}
+
+.client-record-table tbody tr:hover {
   background: rgba(246, 185, 95, 0.16);
 }
 
-.table-status {
-  padding: 6px 9px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.table-status--paid {
-  background: rgba(22, 92, 44, 0.13);
-  color: var(--green);
-}
-
-.table-status--not-paid {
-  background: rgba(139, 30, 0, 0.12);
-  color: var(--red);
-}
-
 @media (max-width: 820px) {
-  .supplier-summary {
+  .client-information {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 560px) {
-  .track-record-header {
-    min-height: 68px;
-    padding-inline: 66px 16px;
-  }
-
-  .triangle-back-button {
-    left: 8px;
-  }
-
-  .triangle-back-button span {
-    border-top-width: 15px;
-    border-right-width: 27px;
-    border-bottom-width: 15px;
-  }
-
-  .supplier-list-main,
-  .supplier-details-main {
+  .client-list-main {
     width: min(100% - 24px, 520px);
     padding: 30px 0 40px;
   }
 
-  .supplier-list-card {
+  .client-list-card {
     padding: 24px 15px;
     border-radius: 23px;
   }
 
-  .supplier-list-heading,
-  .supplier-row {
+  .client-list-heading,
+  .client-row {
     grid-template-columns: minmax(0, 1fr) minmax(115px, 0.85fr);
     gap: 9px;
   }
 
-  .supplier-list-heading {
+  .client-list-heading {
     font-size: 0.83rem;
   }
 
-  .supplier-summary {
+  .client-information {
     gap: 10px;
   }
 
-  .supplier-summary div {
+  .client-details-main {
+    width: min(100% - 24px, 520px);
+    padding: 30px 0 40px;
+  }
+
+  .client-information div {
     min-height: 96px;
     padding: 14px;
     border-radius: 19px;
   }
 
-  .transactions-title-row {
+  .client-records-heading {
     align-items: flex-start;
     flex-direction: column;
     gap: 7px;

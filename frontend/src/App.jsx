@@ -3,7 +3,10 @@ import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SupplierDetailsPage from "./pages/SupplierDetailsPage.jsx";
+import ClientsPage from "./pages/ClientsPage.jsx";
+import ClientDetailsPage from "./pages/ClientDetailsPage.jsx";
 import { demoSuppliers } from "./data/demoSuppliers.js";
+import { demoClients } from "./data/demoClients.js";
 
 const SESSION_KEY = "illuminux-demo-session";
 
@@ -21,6 +24,7 @@ export default function App() {
   const [user, setUser] = useState(readSavedSession);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
 
   function handleLogin(authenticatedUser) {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(authenticatedUser));
@@ -32,11 +36,17 @@ export default function App() {
     setUser(null);
     setCurrentPage("dashboard");
     setSelectedSupplier(null);
+    setSelectedClient(null);
   }
 
   function openSupplier(supplier) {
     setSelectedSupplier(supplier);
     setCurrentPage("supplier-details");
+  }
+
+  function openClient(client) {
+    setSelectedClient(client);
+    setCurrentPage("client-details");
   }
 
   if (!user) {
@@ -53,6 +63,16 @@ export default function App() {
     );
   }
 
+  if (currentPage === "clients") {
+    return (
+      <ClientsPage
+        clients={demoClients}
+        onBack={() => setCurrentPage("dashboard")}
+        onSelectClient={openClient}
+      />
+    );
+  }
+
   if (currentPage === "supplier-details" && selectedSupplier) {
     return (
       <SupplierDetailsPage
@@ -62,10 +82,20 @@ export default function App() {
     );
   }
 
+  if (currentPage === "client-details" && selectedClient) {
+    return (
+      <ClientDetailsPage
+        client={selectedClient}
+        onBack={() => setCurrentPage("clients")}
+      />
+    );
+  }
+
   return (
     <DashboardPage
       user={user}
       onLogout={handleLogout}
+      onOpenClients={() => setCurrentPage("clients")}
       onOpenSuppliers={() => setCurrentPage("suppliers")}
     />
   );

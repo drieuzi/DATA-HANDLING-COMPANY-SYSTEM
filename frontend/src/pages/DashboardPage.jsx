@@ -21,7 +21,7 @@ const MODULE_LABELS = {
   analytics: "Monthly Expenses Analytics"
 };
 
-export default function DashboardPage({ user, onLogout, onOpenSuppliers }) {
+export default function DashboardPage({ user, onLogout, onOpenClients, onOpenSuppliers }) {
   const [dashboardData, setDashboardData] = useState(() =>
     normalizeDashboardData(demoDashboardData)
   );
@@ -86,7 +86,7 @@ export default function DashboardPage({ user, onLogout, onOpenSuppliers }) {
         </div>
 
         <section className="dashboard-menu" aria-label="Company records">
-          <DashboardCard label="Clients" onClick={() => openFutureModule("clients")} />
+          <DashboardCard label="Clients" onClick={onOpenClients} />
           <DashboardCard label="Suppliers" onClick={onOpenSuppliers} />
           <DashboardCard
             label="Receivable"

@@ -1,6 +1,6 @@
-export default function TrackRecordHeader({ title, backLabel, onBack }) {
+export default function TrackRecordHeader({ title, backLabel, onBack, variant = "orange" }) {
   return (
-    <header className="track-record-header">
+    <header className={`track-record-header track-record-header--${variant}`}>
       <button
         className="triangle-back-button"
         type="button"
