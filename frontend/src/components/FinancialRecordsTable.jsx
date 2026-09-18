@@ -1,6 +1,8 @@
 import TrackRecordHeader from "./TrackRecordHeader.jsx";
 
 export default function FinancialRecordsTable({ title, columns, rows, onBack }) {
+  const sectionTitle = title.replace(/ Track Records$/i, "");
+
   return (
     <div className="app-page financial-records-page">
       <TrackRecordHeader
@@ -11,6 +13,14 @@ export default function FinancialRecordsTable({ title, columns, rows, onBack }) 
 
       <main className="financial-records-main">
         <section className="financial-records-card" aria-label={title}>
+          <div className="financial-records-heading">
+            <div>
+              <p>Company records</p>
+              <h2>{sectionTitle} Transactions</h2>
+            </div>
+            <span>{rows.length} record(s)</span>
+          </div>
+
           <div className="financial-table-wrapper">
             <table className="financial-record-table">
               <thead>
