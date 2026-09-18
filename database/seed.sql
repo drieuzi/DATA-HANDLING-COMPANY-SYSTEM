@@ -1,0 +1,1 @@
+-- Development seed records will be added after the database schema is implemented.

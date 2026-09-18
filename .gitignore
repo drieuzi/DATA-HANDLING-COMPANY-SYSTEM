@@ -1,5 +1,9 @@
-
-**/node_modules/
-**/dist/
-**/.env
-**/.env.local
+node_modules/
+dist/
+.vite/
+coverage/
+.env
+.env.local
+!.env.example
+*.log
+.DS_Store

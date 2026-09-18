@@ -1,0 +1,9 @@
+{
+  "name": "illuminux-company-system-backend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Reserved backend workspace for the future Illuminux API",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

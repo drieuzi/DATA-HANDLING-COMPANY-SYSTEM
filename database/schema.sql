@@ -1,0 +1,1 @@
+-- PostgreSQL schema will be added during backend development.
