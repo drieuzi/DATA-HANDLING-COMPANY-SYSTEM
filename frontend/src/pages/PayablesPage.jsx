@@ -1,4 +1,6 @@
+import { useState } from "react";
 import FinancialRecordsTable from "../components/FinancialRecordsTable.jsx";
+import TransactionEditorDialog from "../components/TransactionEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 
 function formatDate(value) {
@@ -14,9 +16,8 @@ function formatDate(value) {
 const columns = [
   { key: "companyName", label: "Company Name" },
   { key: "purchaseOrder", label: "P.O. #" },
+  { key: "voucherNumber", label: "Voucher #", render: (row) => row.voucherNumber || "—" },
   { key: "voucherDate", label: "Voucher Date", render: (row) => formatDate(row.voucherDate) },
-  { key: "paymentDate", label: "Payment Date", render: (row) => formatDate(row.paymentDate) },
-  { key: "chequeDate", label: "Cheque Date", render: (row) => formatDate(row.chequeDate) },
   { key: "amount", label: "Amount", render: (row) => formatCurrency(row.amount) },
   { key: "balance", label: "Balance", render: (row) => formatCurrency(row.balance) },
   {
@@ -34,20 +35,20 @@ const columns = [
   }
 ];
 
-export default function PayablesPage({ suppliers, onBack }) {
+export default function PayablesPage({ suppliers, onBack, onSaveTransaction, embedded = false }) {
+  const [editingRow, setEditingRow] = useState(null);
   const rows = suppliers.flatMap((supplier) =>
     supplier.transactions.map((transaction) => ({
       ...transaction,
+      companyId: supplier.id,
       companyName: supplier.name
     }))
   );
 
   return (
-    <FinancialRecordsTable
-      title="Payables Track Records"
-      columns={columns}
-      rows={rows}
-      onBack={onBack}
-    />
+    <>
+      <FinancialRecordsTable title="Payables Track Records" columns={columns} rows={rows} onBack={onBack} onEdit={setEditingRow} canEdit={(row) => !["Draft", "Issued"].includes(row.voucherStatus)} embedded={embedded} />
+      <TransactionEditorDialog isOpen={Boolean(editingRow)} type="supplier" companyName={editingRow?.companyName || ""} transaction={editingRow} onSave={(values) => { onSaveTransaction(editingRow.companyId, values); setEditingRow(null); }} onClose={() => setEditingRow(null)} />
+    </>
   );
 }

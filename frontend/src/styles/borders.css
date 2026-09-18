@@ -1,0 +1,69 @@
+/* Consistent outlines for every major interface section */
+.site-header,
+.track-record-header {
+  border-bottom: 2px solid var(--border);
+}
+
+.auth-card,
+.auth-card__inner,
+.login-title,
+.dashboard-menu,
+.analytics-card,
+.totals-card,
+.dashboard-card,
+.expenses-chart,
+.analytics-totals div,
+.supplier-list-card,
+.client-list-card,
+.supplier-summary div,
+.client-information div,
+.supplier-transactions,
+.client-records,
+.financial-records-card,
+.record-tabs,
+.voucher-summary div,
+.voucher-card,
+.activity-card,
+.sales-report-card,
+.record-dialog,
+.purchase-dialog {
+  border: 2px solid var(--border);
+}
+
+.field-group input,
+.record-form input,
+.record-form select,
+.record-form textarea,
+.records-toolbar input,
+.records-toolbar select,
+.sales-report-toolbar input,
+.sales-report-toolbar select {
+  border-color: var(--border);
+}
+
+.transactions-title-row,
+.client-records-heading,
+.financial-records-heading,
+.management-heading,
+.sales-month-title {
+  border-bottom: 2px solid var(--border);
+}
+
+.transactions-table th,
+.transactions-table td,
+.client-record-table th,
+.client-record-table td,
+.financial-record-table th,
+.financial-record-table td {
+  border: 1px solid var(--border);
+}
+
+.supplier-row,
+.client-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.supplier-row:last-child,
+.client-row:last-child {
+  border-bottom: 0;
+}

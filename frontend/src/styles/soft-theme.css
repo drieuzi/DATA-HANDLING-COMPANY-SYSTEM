@@ -1,0 +1,89 @@
+/* Warm, low-glare white theme with pale yellow and light orange accents */
+.dashboard-page,
+.supplier-page,
+.client-page,
+.client-details-page,
+.financial-records-page,
+.voucher-page,
+.total-sales-page {
+  background: var(--page-bg);
+}
+
+.dashboard-menu,
+.analytics-card,
+.totals-card,
+.financial-records-card,
+.supplier-transactions,
+.client-records,
+.voucher-card,
+.activity-card,
+.sales-report-card,
+.record-tabs,
+.auth-card {
+  background: var(--white);
+}
+
+.dashboard-card,
+.supplier-list-card,
+.client-list-card,
+.supplier-summary div,
+.client-information div,
+.voucher-summary div,
+.transactions-title-row,
+.client-records-heading,
+.financial-records-heading,
+.management-heading,
+.sales-month-title {
+  background: var(--peach-strong);
+}
+
+.cheque-card,
+.data-badge,
+.login-title,
+.field-group input,
+.transactions-table th,
+.client-record-table th,
+.financial-record-table th,
+.sales-report-table thead th,
+.record-tabs button:hover {
+  background: var(--yellow);
+}
+
+.record-tabs button.active {
+  background: var(--yellow);
+}
+
+.expenses-chart,
+.sales-report-table,
+.sales-report-table tfoot th,
+.sales-report-table tfoot td {
+  background: #ffebca;
+}
+
+.dashboard-menu,
+.analytics-card,
+.totals-card,
+.supplier-transactions,
+.client-records,
+.financial-records-card,
+.voucher-card,
+.activity-card,
+.sales-report-card,
+.record-dialog,
+.purchase-dialog {
+  box-shadow: 0 12px 30px rgba(111, 82, 48, 0.1);
+}
+
+.primary-action,
+.submit-button {
+  border-color: var(--black);
+  background: var(--black);
+  color: var(--white);
+}
+
+.primary-action:hover,
+.submit-button:hover:not(:disabled) {
+  border-color: var(--orange-accent);
+  background: var(--orange-accent);
+  color: var(--black);
+}

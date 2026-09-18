@@ -61,7 +61,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
-  min-height: 282px;
+  min-height: 190px;
   padding: 20px;
   border-radius: 42px;
   background: var(--yellow);

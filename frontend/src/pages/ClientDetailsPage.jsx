@@ -1,4 +1,6 @@
+import { useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
+import TransactionEditorDialog from "../components/TransactionEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 
 function formatDate(value) {
@@ -11,7 +13,9 @@ function formatDate(value) {
   }).format(new Date(`${value}T00:00:00`));
 }
 
-export default function ClientDetailsPage({ client, onBack }) {
+export default function ClientDetailsPage({ client, onBack, onSaveTransaction }) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
   return (
     <div className="app-page client-details-page">
       <TrackRecordHeader
@@ -46,7 +50,7 @@ export default function ClientDetailsPage({ client, onBack }) {
               <p>Client records</p>
               <h2>Transactions</h2>
             </div>
-            <span>{client.transactions.length} record(s)</span>
+            <div className="heading-actions"><span>{client.transactions.length} record(s)</span><button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button></div>
           </div>
 
           <div className="client-table-wrapper">
@@ -60,6 +64,7 @@ export default function ClientDetailsPage({ client, onBack }) {
                   <th>Amount</th>
                   <th>Balance</th>
                   <th>Billing Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -80,6 +85,7 @@ export default function ClientDetailsPage({ client, onBack }) {
                         {transaction.billingStatus}
                       </span>
                     </td>
+                    <td><button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -87,6 +93,7 @@ export default function ClientDetailsPage({ client, onBack }) {
           </div>
         </section>
       </main>
+      <TransactionEditorDialog isOpen={editorOpen} type="client" companyName={client.name} transaction={editingTransaction} onSave={(values) => { onSaveTransaction(client.id, values); setEditorOpen(false); }} onClose={() => setEditorOpen(false)} />
     </div>
   );
 }

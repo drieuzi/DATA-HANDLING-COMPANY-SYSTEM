@@ -69,6 +69,10 @@
   color: var(--red);
 }
 
+.client-status--partially-paid {
+  color: #995000;
+}
+
 .client-details-page {
   background: var(--yellow);
 }

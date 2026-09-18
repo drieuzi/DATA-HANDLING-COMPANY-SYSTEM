@@ -123,6 +123,10 @@
   color: var(--red);
 }
 
+.supplier-status--partially-paid {
+  color: #995000;
+}
+
 .supplier-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

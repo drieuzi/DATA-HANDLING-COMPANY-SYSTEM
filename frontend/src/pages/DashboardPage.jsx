@@ -26,8 +26,9 @@ export default function DashboardPage({
   onLogout,
   onOpenClients,
   onOpenSuppliers,
-  onOpenPayables,
-  onOpenReceivables
+  onOpenVouchers,
+  onOpenSales,
+  recordSummary
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
     normalizeDashboardData(demoDashboardData)
@@ -93,18 +94,8 @@ export default function DashboardPage({
         </div>
 
         <section className="dashboard-menu" aria-label="Company records">
-          <DashboardCard label="Clients" onClick={onOpenClients} />
-          <DashboardCard label="Suppliers" onClick={onOpenSuppliers} />
-          <DashboardCard
-            label="Receivable"
-            value={formatCurrency(dashboardData.receivables)}
-            onClick={onOpenReceivables}
-          />
-          <DashboardCard
-            label="Payables"
-            value={formatCurrency(dashboardData.payables)}
-            onClick={onOpenPayables}
-          />
+          <DashboardCard label="Clients Track Records" onClick={onOpenClients} />
+          <DashboardCard label="Suppliers Track Records" onClick={onOpenSuppliers} />
         </section>
 
         <section className="analytics-card" aria-labelledby="analyticsTitle">
@@ -137,13 +128,13 @@ export default function DashboardPage({
           <DashboardCard
             className="summary-card"
             label="Total Sales"
-            value={formatCurrency(dashboardData.totalSales)}
-            onClick={() => openFutureModule("sales")}
+            value={formatCurrency(recordSummary?.totalSales ?? dashboardData.totalSales)}
+            onClick={onOpenSales}
           />
           <DashboardCard
             className="summary-card"
             label="Total Purchase"
-            value={formatCurrency(purchaseTotals.payablePurchases)}
+            value={formatCurrency(recordSummary?.totalPurchases ?? purchaseTotals.payablePurchases)}
             onClick={() => setPurchaseDialogOpen(true)}
           />
         </section>
@@ -151,7 +142,7 @@ export default function DashboardPage({
         <DashboardCard
           className="cheque-card"
           label="Voucher Cheque"
-          onClick={() => openFutureModule("cheques")}
+          onClick={onOpenVouchers}
         />
       </main>
 

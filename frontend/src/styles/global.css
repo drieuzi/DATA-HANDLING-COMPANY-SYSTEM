@@ -1,14 +1,17 @@
 :root {
-  --peach: #fcd294;
-  --peach-strong: #f6b95f;
-  --yellow: #fdf8b0;
-  --yellow-light: #fefbc1;
+  --page-bg: #fffdf8;
+  --peach: #fff8ef;
+  --peach-strong: #ffe0b5;
+  --yellow: #fff6cf;
+  --yellow-light: #fffbea;
   --white: #ffffff;
-  --black: #080808;
-  --red: #8b1e00;
-  --green: #165c2c;
+  --black: #3b342d;
+  --border: #dccbb6;
+  --orange-accent: #e9a45c;
+  --red: #9b4838;
+  --green: #3f7653;
   color: var(--black);
-  background: var(--peach);
+  background: var(--page-bg);
   font-family: Arial, Helvetica, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -27,7 +30,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: var(--peach);
+  background: var(--page-bg);
 }
 
 button,
@@ -41,7 +44,7 @@ button {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--black);
+  outline: 3px solid var(--orange-accent);
   outline-offset: 4px;
 }
 
