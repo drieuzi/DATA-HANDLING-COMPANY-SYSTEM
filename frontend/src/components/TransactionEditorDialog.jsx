@@ -6,7 +6,9 @@ function createInitialFields(type, transaction) {
       ...transaction,
       amount: String(transaction.amount ?? ""),
       balance: String(transaction.balance ?? ""),
-      paymentDate: transaction.paymentDate === "—" ? "" : transaction.paymentDate || ""
+      voucherDate: transaction.voucherDate === "—" ? "" : transaction.voucherDate || "",
+      paymentDate: transaction.paymentDate === "—" ? "" : transaction.paymentDate || "",
+      chequeDate: transaction.chequeDate === "—" ? "" : transaction.chequeDate || ""
     };
   }
 
@@ -41,8 +43,8 @@ export default function TransactionEditorDialog({
   const dialogRef = useRef(null);
   const [fields, setFields] = useState(() => createInitialFields(type, transaction));
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
   const isSupplier = type === "supplier";
-  const isVoucherLocked = isSupplier && ["Draft", "Issued"].includes(transaction?.voucherStatus);
 
   useEffect(() => {
     setFields(createInitialFields(type, transaction));
@@ -61,39 +63,35 @@ export default function TransactionEditorDialog({
     setFields((current) => ({ ...current, [name]: value }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const amount = Number(fields.amount);
-    const balance = isSupplier
-      ? transaction?.balance ?? amount
-      : fields.balance === "" ? amount : Number(fields.balance);
+    const balance = transaction?.balance ?? amount;
 
     if (!fields.purchaseOrder.trim() || !fields.salesInvoice.trim() || amount <= 0) {
       setMessage("P.O. number, S.I. number, and a valid amount are required.");
       return;
     }
 
-    if (balance < 0 || balance > amount) {
-      setMessage("Balance must be between zero and the transaction amount.");
-      return;
+    setSaving(true);
+    setMessage("");
+    try {
+      await onSave({
+        ...fields,
+        id: transaction?.id,
+        purchaseOrder: fields.purchaseOrder.trim(),
+        salesInvoice: fields.salesInvoice.trim(),
+        collectionReceipt: fields.collectionReceipt.trim() || (isSupplier ? "" : "—"),
+        paymentDate: fields.paymentDate || (isSupplier ? "" : "—"),
+        amount,
+        balance,
+        attachmentName: fields.attachmentName || ""
+      });
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSaving(false);
     }
-
-    if (!isSupplier && balance < amount && !fields.paymentDate) {
-      setMessage("Enter the exact payment date for a paid or partially paid transaction.");
-      return;
-    }
-
-    onSave({
-      ...fields,
-      id: transaction?.id,
-      purchaseOrder: fields.purchaseOrder.trim(),
-      salesInvoice: fields.salesInvoice.trim(),
-      collectionReceipt: fields.collectionReceipt.trim() || "—",
-      paymentDate: fields.paymentDate || "—",
-      amount,
-      balance,
-      attachmentName: fields.attachmentName || ""
-    });
   }
 
   return (
@@ -106,12 +104,6 @@ export default function TransactionEditorDialog({
         <button type="button" onClick={onClose} aria-label="Close transaction form">×</button>
       </div>
 
-      {isVoucherLocked ? (
-        <div className="locked-record-message">
-          This transaction is locked because voucher {transaction.voucherNumber} is {transaction.voucherStatus.toLowerCase()}.
-          Cancel the voucher before editing its financial details.
-        </div>
-      ) : (
         <form className="record-form" onSubmit={handleSubmit}>
           <label>
             P.O. Number
@@ -135,24 +127,10 @@ export default function TransactionEditorDialog({
             </label>
           )}
 
-          {!isSupplier && (
-            <label>
-              Exact Payment Date
-              <input type="date" name="paymentDate" value={fields.paymentDate} onChange={updateField} />
-            </label>
-          )}
-
           <label>
             Amount
             <input type="number" min="0.01" step="0.01" name="amount" value={fields.amount} onChange={updateField} required />
           </label>
-
-          {!isSupplier && (
-            <label>
-              Remaining Balance
-              <input type="number" min="0" step="0.01" name="balance" value={fields.balance} onChange={updateField} />
-            </label>
-          )}
 
           <label className="record-form__wide">
             Hardcopy attachment
@@ -171,10 +149,9 @@ export default function TransactionEditorDialog({
 
           <div className="record-form__actions record-form__wide">
             <button className="secondary-action" type="button" onClick={onClose}>Cancel</button>
-            <button className="primary-action" type="submit">Save Transaction</button>
+            <button className="primary-action" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Transaction"}</button>
           </div>
         </form>
-      )}
     </dialog>
   );
 }

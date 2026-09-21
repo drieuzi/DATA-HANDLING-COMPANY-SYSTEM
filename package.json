@@ -3,10 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "setup": "npm --prefix frontend install",
-    "postinstall": "npm --prefix frontend install",
-    "dev": "npm --prefix frontend run dev",
+    "setup": "npm --prefix backend install && npm --prefix frontend install",
+    "postinstall": "npm --prefix backend install && npm --prefix frontend install",
+    "dev": "concurrently -n API,WEB -c blue,yellow \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "db:init": "npm --prefix backend run db:init",
+    "db:verify": "npm --prefix backend run db:verify",
+    "db:test-supplier": "npm --prefix backend run db:test-supplier",
+    "db:test-client": "npm --prefix backend run db:test-client",
+    "create-admin": "npm --prefix backend run create-admin --",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

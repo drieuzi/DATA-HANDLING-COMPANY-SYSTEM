@@ -1,1 +1,3 @@
--- Development seed records will be added after the database schema is implemented.
+-- User passwords are intentionally not stored in this SQL file.
+-- After running the schema, create the first administrator with:
+-- npm run create-admin -- admin "YourSecurePassword" "Administrator Name"

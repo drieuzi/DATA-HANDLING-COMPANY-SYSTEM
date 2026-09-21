@@ -24,10 +24,10 @@ export default function LoginPage({ onLogin }) {
 
     const username = fields.username.trim();
 
-    if (username.length < 3 || fields.password.length < 6) {
+    if (username.length < 3 || fields.password.length < 8) {
       setMessage({
         type: "error",
-        text: "Enter a username of at least 3 characters and a password of at least 6 characters."
+        text: "Enter a username of at least 3 characters and a password of at least 8 characters."
       });
       return;
     }
@@ -86,7 +86,7 @@ export default function LoginPage({ onLogin }) {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  minLength="6"
+                  minLength="8"
                   value={fields.password}
                   onChange={updateField}
                   required

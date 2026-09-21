@@ -1,4 +1,6 @@
+import { useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
+import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import PayablesPage from "./PayablesPage.jsx";
 
 export default function SuppliersPage({
@@ -6,9 +8,18 @@ export default function SuppliersPage({
   onBack,
   onSelectSupplier,
   onSaveTransaction,
+  onDeleteTransaction,
+  user,
+  onSaveSupplier,
+  onDeleteSupplier,
+  onRestoreSupplier,
   activeTab,
   onTabChange
 }) {
+  const [supplierEditor, setSupplierEditor] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const isAdmin = user?.role === "admin";
+
   return (
     <div className="app-page supplier-page">
       <TrackRecordHeader
@@ -46,18 +57,17 @@ export default function SuppliersPage({
         {activeTab === "payables" ? (
           <div id="supplier-payables-panel" role="tabpanel" aria-labelledby="supplier-payables-tab">
             <PayablesPage
-              suppliers={suppliers}
+              suppliers={suppliers.filter((supplier) => !supplier.deletedAt)}
               onSaveTransaction={onSaveTransaction}
+              onDeleteTransaction={onDeleteTransaction}
+              isAdmin={isAdmin}
               embedded
             />
           </div>
         ) : (
-          <section
-            className="supplier-list-card record-list-card"
-            id="supplier-names-panel"
-            role="tabpanel"
-            aria-labelledby="supplier-names-tab"
-          >
+          <div id="supplier-names-panel" role="tabpanel" aria-labelledby="supplier-names-tab">
+            <div className="management-toolbar"><span>{isAdmin ? "Admin supplier controls" : "Employee supplier controls"}</span><button className="primary-action" type="button" onClick={() => { setSupplierEditor(null); setEditorOpen(true); }}>+ Add Supplier</button></div>
+            <section className="supplier-list-card record-list-card">
             <div className="supplier-list-heading" id="supplierListTitle">
               <span>Supplier Names</span>
               <span>Billing Status</span>
@@ -65,24 +75,28 @@ export default function SuppliersPage({
 
             <div className="supplier-list" role="list">
               {suppliers.map((supplier) => (
-                <div className="supplier-row" role="listitem" key={supplier.id}>
+                <div className={`supplier-row ${supplier.deletedAt ? "is-deleted" : ""}`} role="listitem" key={supplier.id}>
                   <button
                     className="supplier-name-button"
                     type="button"
-                    onClick={() => onSelectSupplier(supplier)}
+                    onClick={() => !supplier.deletedAt && onSelectSupplier(supplier)}
+                    disabled={Boolean(supplier.deletedAt)}
                     aria-label={`Open ${supplier.name} supplier records`}
                   >
                     {supplier.name}
                   </button>
-                  <span className={`supplier-status supplier-status--${supplier.billingStatus.toLowerCase().replaceAll(" ", "-")}`}>
-                    {supplier.billingStatus}
-                  </span>
+                  <div className="supplier-row-controls">
+                    <span className={`supplier-status supplier-status--${supplier.billingStatus.toLowerCase().replaceAll(" ", "-")}`}>{supplier.deletedAt ? "Deleted" : supplier.billingStatus}</span>
+                    {isAdmin && supplier.deletedAt && <div className="row-actions"><button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore</button></div>}
+                  </div>
                 </div>
               ))}
             </div>
-          </section>
+            </section>
+          </div>
         )}
       </main>
+      <SupplierEditorDialog isOpen={editorOpen} supplier={supplierEditor} onSave={(values) => onSaveSupplier(supplierEditor?.id, values)} onClose={() => setEditorOpen(false)} />
     </div>
   );
 }

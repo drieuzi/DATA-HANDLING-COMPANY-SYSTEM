@@ -12,7 +12,7 @@
   overflow: hidden;
   border-radius: 28px;
   background: var(--white);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 12px 35px var(--shadow-color);
 }
 
 .sales-report-toolbar {
@@ -37,7 +37,7 @@
   width: 100%;
   min-height: 44px;
   padding: 10px 13px;
-  border: 2px solid rgba(0, 0, 0, 0.24);
+  border: 2px solid var(--border);
   border-radius: 13px;
   background: var(--yellow-light);
   color: var(--black);
@@ -90,7 +90,7 @@
 }
 
 .sales-report-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--orange-wash);
 }
 
 .sales-report-table tfoot th,

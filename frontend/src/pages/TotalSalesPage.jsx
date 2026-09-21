@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
+import { formatRecordDate } from "../utils/recordHelpers.js";
 
 function getMonthKey(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date.slice(0, 7) : "";
@@ -17,16 +18,12 @@ function formatMonth(monthKey) {
 
 function formatPaymentDate(value) {
   if (!value || value === "—") return "Not paid yet";
-  return new Intl.DateTimeFormat("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric"
-  }).format(new Date(`${value}T00:00:00`));
+  return formatRecordDate(value);
 }
 
 export default function TotalSalesPage({ clients, onBack }) {
-  const transactions = useMemo(() => clients.flatMap((client) =>
-    client.transactions.map((transaction) => ({
+  const transactions = useMemo(() => clients.filter((client) => !client.deletedAt).flatMap((client) =>
+    client.transactions.filter((transaction) => !transaction.deletedAt).map((transaction) => ({
       ...transaction,
       companyId: client.id,
       companyName: client.name,

@@ -1,8 +1,8 @@
 import { demoDashboardData } from "../data/demoDashboardData.js";
 import { normalizeDashboardData } from "../utils/dashboardCalculations.js";
+import { apiRequest } from "./apiClient.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-const USE_DEMO_DATA = import.meta.env.VITE_USE_DEMO_DATA !== "false";
+const USE_DEMO_DATA = import.meta.env.VITE_USE_DEMO_DASHBOARD === "true";
 
 /*
   Expected backend response from GET /api/dashboard?year=2026:
@@ -28,15 +28,7 @@ export async function getDashboardData(year) {
     };
   }
 
-  const response = await fetch(`${API_BASE_URL}/dashboard?year=${year}`, {
-    credentials: "include"
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to load dashboard information from the server.");
-  }
-
-  const data = normalizeDashboardData(await response.json());
+  const data = normalizeDashboardData(await apiRequest(`/dashboard?year=${year}`));
 
   return { data, source: "live" };
 }

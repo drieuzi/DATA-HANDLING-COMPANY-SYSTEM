@@ -12,6 +12,8 @@
   padding: 31px clamp(24px, 8vw, 70px);
   border-radius: 28px;
   background: var(--peach-strong);
+  border: 2px solid var(--border);
+  box-shadow: 0 12px 35px var(--shadow-color);
 }
 
 .client-list-heading,
@@ -32,6 +34,17 @@
 
 .client-row {
   min-height: 43px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.client-row:last-child { border-bottom: 0; }
+
+.client-row-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .client-name-button {
@@ -70,7 +83,7 @@
 }
 
 .client-status--partially-paid {
-  color: #995000;
+  color: var(--orange-deep);
 }
 
 .client-details-page {
@@ -120,8 +133,21 @@
   overflow: hidden;
   border-radius: 28px;
   background: var(--white);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 35px var(--shadow-color);
 }
+
+.payment-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.payment-balance span { font-size: .72rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.payment-balance strong { font-size: 1.25rem; }
 
 .client-records-heading {
   display: flex;
@@ -165,7 +191,7 @@
 .client-record-table th,
 .client-record-table td {
   padding: 15px 13px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
 }
@@ -182,7 +208,7 @@
 }
 
 .client-record-table tbody tr:hover {
-  background: rgba(246, 185, 95, 0.16);
+  background: var(--orange-wash);
 }
 
 @media (max-width: 820px) {

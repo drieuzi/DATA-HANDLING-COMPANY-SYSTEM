@@ -1,6 +1,10 @@
+import ThemeToggle from "./ThemeToggle.jsx";
+
 export default function Header({ user, onLogout }) {
   return (
     <header className="site-header">
+      <ThemeToggle className="site-theme-toggle" />
+
       <div className="brand" aria-label="Illuminux General Merch Company">
         <span className="brand-name">
           <span className="brand-accent">I</span>LLUMINUX
@@ -18,7 +22,7 @@ export default function Header({ user, onLogout }) {
       {user && (
         <div className="header-session">
           <span className="header-user" title={`Logged in as ${user.username}`}>
-            {user.username}
+            {user.username} · {user.role}
           </span>
           <button className="logout-button" type="button" onClick={onLogout}>
             Log out

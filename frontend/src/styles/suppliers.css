@@ -23,6 +23,17 @@
   text-transform: uppercase;
 }
 
+.track-theme-toggle {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+}
+
+.track-theme-toggle:hover {
+  transform: translateY(calc(-50% - 1px));
+}
+
 .triangle-back-button {
   position: absolute;
   top: 50%;
@@ -124,7 +135,7 @@
 }
 
 .supplier-status--partially-paid {
-  color: #995000;
+  color: var(--orange-deep);
 }
 
 .supplier-summary {
@@ -162,7 +173,7 @@
   overflow: hidden;
   border-radius: 28px;
   background: var(--white);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 35px var(--shadow-color);
 }
 
 .transactions-title-row {
@@ -206,7 +217,7 @@
 .transactions-table th,
 .transactions-table td {
   padding: 15px 13px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
 }
@@ -219,7 +230,7 @@
 }
 
 .transactions-table tbody tr:hover {
-  background: rgba(246, 185, 95, 0.16);
+  background: var(--orange-wash);
 }
 
 .table-status {
@@ -231,12 +242,12 @@
 }
 
 .table-status--paid {
-  background: rgba(22, 92, 44, 0.13);
+  background: var(--green-soft);
   color: var(--green);
 }
 
 .table-status--not-paid {
-  background: rgba(139, 30, 0, 0.12);
+  background: var(--red-soft);
   color: var(--red);
 }
 
@@ -249,7 +260,7 @@
 @media (max-width: 560px) {
   .track-record-header {
     min-height: 68px;
-    padding-inline: 66px 16px;
+    padding-inline: 66px 60px;
   }
 
   .triangle-back-button {
@@ -260,6 +271,17 @@
     border-top-width: 15px;
     border-right-width: 27px;
     border-bottom-width: 15px;
+  }
+
+  .track-theme-toggle {
+    right: 8px;
+    width: 42px;
+    min-height: 38px;
+    padding: 5px;
+  }
+
+  .track-theme-toggle > span:last-child {
+    display: none;
   }
 
   .supplier-list-main,

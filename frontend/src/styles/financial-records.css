@@ -10,9 +10,10 @@
 
 .financial-records-card {
   overflow: hidden;
+  border: 2px solid var(--border);
   border-radius: 28px;
   background: var(--white);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 35px var(--shadow-color);
 }
 
 .financial-records-heading {
@@ -57,10 +58,13 @@
 .financial-record-table th,
 .financial-record-table td {
   padding: 15px 13px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
 }
+
+.financial-record-table tr > :last-child { border-right: 0; }
 
 .financial-record-table th {
   background: var(--yellow-light);
@@ -74,7 +78,7 @@
 }
 
 .financial-record-table tbody tr:hover {
-  background: rgba(246, 185, 95, 0.16);
+  background: var(--orange-wash);
 }
 
 .financial-records-empty {

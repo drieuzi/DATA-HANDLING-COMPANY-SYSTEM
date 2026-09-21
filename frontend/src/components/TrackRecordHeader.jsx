@@ -1,3 +1,5 @@
+import ThemeToggle from "./ThemeToggle.jsx";
+
 export default function TrackRecordHeader({ title, backLabel, onBack, variant = "orange" }) {
   return (
     <header className={`track-record-header track-record-header--${variant}`}>
@@ -11,6 +13,7 @@ export default function TrackRecordHeader({ title, backLabel, onBack, variant = 
         <span aria-hidden="true" />
       </button>
       <h1>{title}</h1>
+      <ThemeToggle className="track-theme-toggle" />
     </header>
   );
 }

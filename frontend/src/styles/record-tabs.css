@@ -12,7 +12,7 @@
   padding: 9px;
   border-radius: 24px;
   background: var(--white);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px var(--shadow-color);
 }
 
 .record-tabs button {
@@ -35,7 +35,7 @@
 .record-tabs button.active {
   border-color: var(--orange-accent);
   background: var(--peach-strong);
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 0 var(--shadow-color);
 }
 
 .record-list-card {

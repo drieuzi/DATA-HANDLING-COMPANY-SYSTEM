@@ -1,47 +1,41 @@
-# React migration notes
+# Current migration status
 
-The frontend was migrated from separate HTML, CSS, and vanilla JavaScript pages to one React application powered by Vite.
+The frontend is a React/Vite application. The Supplier workflow has now moved from browser-only records to the Express/PostgreSQL API.
 
-## Current frontend
+## PostgreSQL-backed features
 
-- `frontend/index.html` is the only HTML entry point.
-- `frontend/src/main.jsx` starts React and imports the shared styles.
-- `frontend/src/App.jsx` owns page navigation and the shared local record state.
-- `frontend/src/pages` contains login, dashboard, client, supplier, payable, receivable, and voucher pages.
-- `frontend/src/components` contains reusable cards, headers, charts, tables, and record dialogs.
-- `frontend/src/hooks/usePersistentState.js` saves the current prototype data to browser `localStorage`.
-- `frontend/src/services` contains the prepared future API calls.
-- `frontend/public/illuminux-logo.png` is served at `/illuminux-logo.png`.
+- JWT login through an HTTP-only cookie
+- Admin/User account management
+- suppliers and recoverable supplier deletion
+- supplier transactions and recoverable transaction deletion
+- live Payables derived from transaction balances
+- vouchers with unique voucher numbers
+- partial payment history
+- voucher cancellation and payment reversal
+- recoverable voucher deletion
+- live purchase/payable/dashboard expense calculations
+- audit logs
 
-The previous standalone files such as `dashboard.html`, `style.css`, and `frontend/js/*.js` are no longer part of the React application and should not be restored.
+## Client workflow now connected
 
-## Record relationships in the local prototype
+- clients and recoverable client deletion
+- client transactions and recoverable transaction deletion
+- live Receivables derived from transaction balances
+- partial/full client payments with exact payment dates
+- Total Sales and dashboard sales totals from the same transactions
+- audit logging for client changes and payments
 
-- Supplier transactions are the source for Payables and Total Purchase.
-- Client transactions are the source for Receivables and Total Sales.
-- A voucher cheque links to one supplier transaction through its transaction ID and voucher number.
-- Saving a draft voucher reserves the payable transaction.
-- Issuing that voucher reduces its balance to zero and changes its billing status to Paid.
-- Cancelling the voucher restores the payable balance.
-- Monthly expense analytics combines payable purchases and outside-service expense data.
+Uploaded hardcopy file contents are still not stored; the current UI records filenames only.
 
-## Package-file locations
+## Important behavior changes
 
-- The root `package.json` contains convenience commands and automatically installs frontend dependencies.
-- `frontend/package.json` contains React and Vite dependencies.
-- The filename `packcage.json` is a typo and must not be used.
-- Vite's `index.html`, `vite.config.js`, and `.env.example` belong inside `frontend`.
+- A Draft voucher does not change a transaction balance.
+- Issuing a voucher creates a payment and reduces the balance atomically.
+- Partial voucher amounts are allowed.
+- Cancelling an Issued voucher reverses its payment and restores the balance.
+- Cancelled vouchers remain part of the active voucher count.
+- An Issued voucher cannot be deleted until it is cancelled.
+- Only Admins manage suppliers, issue/cancel/delete vouchers, delete transactions, manage accounts, and view audit logs.
+- Users do not self-register; an Admin creates their accounts in the Account Management page.
 
-## Local-only limitations
-
-Records currently exist only in the browser where they were entered. Clearing site data removes them, and they are not shared with another computer. File inputs retain the filename only; the file itself is not uploaded or stored.
-
-## Backend connection later
-
-When the backend is ready, copy `frontend/.env.example` to `frontend/.env` and set:
-
-```env
-VITE_USE_DEMO_DATA=false
-```
-
-The prepared calls are `POST /api/auth/login` and `GET /api/dashboard?year=YYYY`. Supplier, client, payable, receivable, voucher, activity, and document endpoints still need to be designed and implemented.
+Run `npm run db:init` after installing this update so existing databases receive the new soft-delete, payment-reversal, and JWT-revocation fields.

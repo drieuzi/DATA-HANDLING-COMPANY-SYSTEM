@@ -28,7 +28,9 @@ export default function DashboardPage({
   onOpenSuppliers,
   onOpenVouchers,
   onOpenSales,
-  recordSummary
+  onOpenAdmin,
+  recordSummary,
+  voucherCount
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
     normalizeDashboardData(demoDashboardData)
@@ -96,6 +98,9 @@ export default function DashboardPage({
         <section className="dashboard-menu" aria-label="Company records">
           <DashboardCard label="Clients Track Records" onClick={onOpenClients} />
           <DashboardCard label="Suppliers Track Records" onClick={onOpenSuppliers} />
+          {user.role === "admin" && (
+            <DashboardCard className="admin-dashboard-card" label="Manage User Accounts" onClick={onOpenAdmin} />
+          )}
         </section>
 
         <section className="analytics-card" aria-labelledby="analyticsTitle">
@@ -142,6 +147,7 @@ export default function DashboardPage({
         <DashboardCard
           className="cheque-card"
           label="Voucher Cheque"
+          value={`${dashboardData.voucherCounts?.total ?? voucherCount ?? 0} total`}
           onClick={onOpenVouchers}
         />
       </main>

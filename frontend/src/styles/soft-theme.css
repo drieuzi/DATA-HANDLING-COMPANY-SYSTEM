@@ -1,4 +1,4 @@
-/* Warm, low-glare white theme with pale yellow and light orange accents */
+/* Illuminux logo palette: warm white, pale cream, orange, and deep brown */
 .dashboard-page,
 .supplier-page,
 .client-page,
@@ -37,6 +37,26 @@
   background: var(--peach-strong);
 }
 
+/* Dashboard layout from the approved mockup */
+.dashboard-page {
+  background: var(--page-bg);
+}
+
+.dashboard-menu,
+.analytics-card,
+.totals-card {
+  background: var(--white);
+}
+
+.dashboard-card,
+.expenses-chart {
+  background: var(--peach-strong);
+}
+
+.analytics-totals div {
+  background: var(--white);
+}
+
 .cheque-card,
 .data-badge,
 .login-title,
@@ -57,7 +77,7 @@
 .sales-report-table,
 .sales-report-table tfoot th,
 .sales-report-table tfoot td {
-  background: #ffebca;
+  background: var(--peach);
 }
 
 .dashboard-menu,
@@ -71,7 +91,7 @@
 .sales-report-card,
 .record-dialog,
 .purchase-dialog {
-  box-shadow: 0 12px 30px rgba(111, 82, 48, 0.1);
+  box-shadow: 0 12px 30px var(--shadow-color);
 }
 
 .primary-action,

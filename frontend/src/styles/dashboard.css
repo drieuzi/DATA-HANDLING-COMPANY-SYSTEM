@@ -88,7 +88,7 @@
 }
 
 .dashboard-card:hover {
-  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 0 var(--shadow-color);
   transform: translateY(-3px);
 }
 
@@ -100,6 +100,13 @@
   text-overflow: ellipsis;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.admin-dashboard-card {
+  grid-column: 1 / -1;
+  min-height: 72px;
+  background: var(--white);
+  font-size: clamp(0.9rem, 1.8vw, 1.15rem);
 }
 
 .analytics-card {
@@ -167,7 +174,7 @@
   right: 12px;
   padding: 4px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--white);
   font-size: 0.62rem;
   font-weight: 900;
 }
@@ -276,7 +283,7 @@
   background: var(--white);
   font-size: 0.85rem;
   font-weight: 800;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 14px 40px var(--shadow-color-strong);
 }
 
 .purchase-dialog {
@@ -286,11 +293,11 @@
   border-radius: 28px;
   background: var(--white);
   color: var(--black);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 24px 80px var(--shadow-color-strong);
 }
 
 .purchase-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay);
 }
 
 .purchase-dialog__header {
@@ -340,7 +347,7 @@
   justify-content: space-between;
   gap: 24px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+  border-bottom: 1px solid var(--border);
 }
 
 .purchase-breakdown dt {

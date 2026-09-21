@@ -8,6 +8,12 @@ export function normalizeDashboardData(data) {
     totalSales: toNumber(data.totalSales),
     receivables: toNumber(data.receivables),
     payables: toNumber(data.payables),
+    totalPurchases: toNumber(data.totalPurchases),
+    currentMonthExpenses: toNumber(data.currentMonthExpenses),
+    partiallyPaidTransactions: toNumber(data.partiallyPaidTransactions),
+    paidTransactions: toNumber(data.paidTransactions),
+    notPaidTransactions: toNumber(data.notPaidTransactions),
+    voucherCounts: data.voucherCounts || { total: 0, draft: 0, issued: 0, cancelled: 0, deleted: 0 },
     monthlyExpenses: Array.isArray(data.monthlyExpenses)
       ? data.monthlyExpenses.map((item) => ({
           month: String(item.month || ""),
