@@ -76,6 +76,8 @@
 .records-toolbar select { width: 100%; padding: 11px 13px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); color: var(--black); font: inherit; }
 .record-form textarea { resize: vertical; }
 .record-form small { overflow: hidden; text-overflow: ellipsis; text-transform: none; }
+.record-form .voucher-tax-toggle { display: flex; align-items: center; grid-template-columns: none; flex-direction: row; gap: 10px; padding: 12px 14px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); }
+.record-form .voucher-tax-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--orange); }
 .record-form__wide { grid-column: 1 / -1; }
 .record-form__message { min-height: 18px; margin: 0; color: var(--red); font-size: .78rem; font-weight: 800; }
 .record-form__actions { display: flex; justify-content: flex-end; gap: 10px; }

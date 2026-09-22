@@ -1,7 +1,8 @@
 const express = require("express");
 const {
   cancelVoucher, createVoucher, deleteVoucher, getVoucher, issueVoucher,
-  listPayables, listVouchers, paymentHistory, restoreVoucher, updateVoucher
+  listPayables, listVouchers, paymentHistory, previewNextVoucherNumber,
+  restoreVoucher, updateVoucher
 } = require("../controllers/paymentcontroller");
 const { requireAdmin, requireAuth, requireUser } = require("../middleware/authmiddleware");
 
@@ -10,6 +11,7 @@ router.use(requireAuth);
 
 router.get("/payables", listPayables);
 router.get("/vouchers", listVouchers);
+router.get("/vouchers/next-number", previewNextVoucherNumber);
 router.get("/vouchers/:id", getVoucher);
 router.get("/transactions/:id/payments", paymentHistory);
 router.post("/vouchers", createVoucher);

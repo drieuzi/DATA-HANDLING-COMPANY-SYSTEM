@@ -5,12 +5,19 @@ export async function listVouchers(includeDeleted = false) {
   return (Array.isArray(result.vouchers) ? result.vouchers : []).map((voucher) => ({
     ...voucher,
     status: voucher.status || "Draft",
-    amountApplied: Number(voucher.amountApplied || 0)
+    amountApplied: Number(voucher.amountApplied || 0),
+    withholdingTaxRate: Number(voucher.withholdingTaxRate || 0),
+    withholdingTaxAmount: Number(voucher.withholdingTaxAmount || 0),
+    netChequeAmount: Number(voucher.netChequeAmount ?? voucher.amountApplied ?? 0)
   }));
 }
 
 export async function createVoucher(values) {
   return (await apiRequest("/vouchers", { method: "POST", body: JSON.stringify(values) })).voucher;
+}
+
+export async function getNextVoucherNumber() {
+  return (await apiRequest("/vouchers/next-number")).voucherNumber;
 }
 
 export async function updateVoucher(id, values) {

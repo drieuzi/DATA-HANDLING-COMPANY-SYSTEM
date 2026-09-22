@@ -17,6 +17,10 @@ function mapVoucher(row) {
     salesInvoice: row.sales_invoice_number || "—", voucherDate: row.voucher_date,
     chequeDate: row.cheque_date || "—", chequeNumber: row.cheque_number || "—",
     paymentDate: row.payment_date || "—", amountApplied: Number(row.payment_amount || 0),
+    withholdingTaxRate: Number(row.withholding_tax_rate || 0),
+    withholdingTaxAmount: Number(row.withholding_tax_amount || 0),
+    netChequeAmount: Number(row.net_cheque_amount ?? row.payment_amount ?? 0),
+    bankName: row.bank_name || "",
     status: row.payment_status || "Draft", particulars: row.particulars || "",
     attachmentName: row.attachment_name || "", deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason, createdAt: row.created_at, updatedAt: row.updated_at
@@ -63,6 +67,22 @@ async function listVouchers(request, response, next) {
   } catch (error) { next(error); }
 }
 
+async function previewNextVoucherNumber(_request, response, next) {
+  try {
+    const result = await pool.query(
+      `SELECT current_value + 1 AS next_value
+       FROM system_counters
+       WHERE counter_name = 'voucher_number'`
+    );
+    if (!result.rows[0]) {
+      throw new HttpError(500, "Voucher number series is not initialized. Run the database initializer.");
+    }
+    response.json({
+      voucherNumber: String(result.rows[0].next_value).padStart(6, "0")
+    });
+  } catch (error) { next(error); }
+}
+
 async function getVoucher(request, response, next) {
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
@@ -80,11 +100,13 @@ async function getVoucher(request, response, next) {
   } catch (error) { next(error); }
 }
 
-function voucherValues(body) {
+function voucherValues(body, { allowCancelled = false } = {}) {
   const paymentStatus = validate.text(body.status || body.paymentStatus || "Draft", "Voucher status", { required: true, max: 20 });
-  if (!["Draft", "Issued"].includes(paymentStatus)) throw new HttpError(400, "Voucher status must be Draft or Issued.");
+  const allowedStatuses = allowCancelled ? ["Draft", "Issued", "Cancelled"] : ["Draft", "Issued"];
+  if (!allowedStatuses.includes(paymentStatus)) {
+    throw new HttpError(400, `Voucher status must be ${allowedStatuses.join(", ")}.`);
+  }
   return {
-    voucherNumber: validate.text(body.voucherNumber, "Voucher number", { required: true, max: 80 }),
     supplierTransactionId: validate.id(body.transactionId || body.supplierTransactionId, "Supplier transaction ID"),
     supplierId: validate.id(body.supplierId, "Supplier ID"),
     voucherDate: validate.date(body.voucherDate, "Voucher date", { required: true }),
@@ -92,6 +114,8 @@ function voucherValues(body) {
     chequeNumber: validate.text(body.chequeNumber, "Cheque number", { max: 80 }),
     paymentDate: validate.date(body.paymentDate, "Payment date", { required: paymentStatus === "Issued" }),
     paymentAmount: validate.money(body.amountApplied || body.paymentAmount, "Payment amount"),
+    withholdingTaxRate: body.applyWithholdingTax === true ? "0.0100" : "0",
+    bankName: validate.text(body.bankName, "Bank used", { required: true, max: 120 }),
     paymentStatus,
     particulars: validate.text(body.particulars, "Particulars", { max: 2000 }),
     attachmentName: validate.text(body.attachmentName, "Attachment name", { max: 255 })
@@ -124,7 +148,7 @@ async function issueVoucher(request, response, next) {
 async function updateVoucher(request, response, next) {
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
-    await updateVoucherDetails(request, voucherId, voucherValues(request.body));
+    await updateVoucherDetails(request, voucherId, voucherValues(request.body, { allowCancelled: true }));
     const result = await pool.query(
       `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
          st.sales_invoice_number
@@ -222,5 +246,6 @@ async function paymentHistory(request, response, next) {
 
 module.exports = {
   cancelVoucher, createVoucher, deleteVoucher, getVoucher, issueVoucher,
-  listPayables, listVouchers, paymentHistory, restoreVoucher, updateVoucher
+  listPayables, listVouchers, paymentHistory, previewNextVoucherNumber,
+  restoreVoucher, updateVoucher
 };

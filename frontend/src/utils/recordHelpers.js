@@ -21,15 +21,6 @@ export function calculateCompanyStatus(transactions) {
   return "Not Paid";
 }
 
-export function getNextVoucherNumber(vouchers) {
-  const highestNumber = vouchers.reduce((highest, voucher) => {
-    const numericValue = Number.parseInt(String(voucher.voucherNumber).replace(/\D/g, ""), 10);
-    return Number.isFinite(numericValue) ? Math.max(highest, numericValue) : highest;
-  }, 140);
-
-  return String(highestNumber + 1).padStart(6, "0");
-}
-
 export function formatRecordDate(value) {
   if (!value || value === "—") return "—";
 

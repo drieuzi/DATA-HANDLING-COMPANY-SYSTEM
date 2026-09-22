@@ -136,6 +136,12 @@ CREATE TABLE IF NOT EXISTS vouchers (
     attachment_name VARCHAR(255),
     payment_date DATE,
     payment_amount NUMERIC(14, 2) NOT NULL,
+    withholding_tax_rate NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    withholding_tax_amount NUMERIC(14, 2)
+        GENERATED ALWAYS AS (ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+    net_cheque_amount NUMERIC(14, 2)
+        GENERATED ALWAYS AS (payment_amount - ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+    bank_name VARCHAR(120),
     payment_status VARCHAR(20) NOT NULL DEFAULT 'Draft'
         CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled')),
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
@@ -149,6 +155,8 @@ CREATE TABLE IF NOT EXISTS vouchers (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT vouchers_positive_payment_amount
         CHECK (payment_amount > 0),
+    CONSTRAINT vouchers_withholding_tax_rate_check
+        CHECK (withholding_tax_rate IN (0, 0.0100)),
     CONSTRAINT vouchers_transaction_supplier_fk
         FOREIGN KEY (supplier_transaction_id, supplier_id)
         REFERENCES supplier_transactions (id, supplier_id)
@@ -177,6 +185,28 @@ CREATE INDEX IF NOT EXISTS vouchers_supplier_index
 
 CREATE INDEX IF NOT EXISTS vouchers_status_index
     ON vouchers (payment_status, voucher_date DESC);
+
+-- Keeps voucher numbers continuous even when multiple users create vouchers.
+-- The counter update and voucher insert happen in the same database transaction,
+-- so a failed voucher does not consume a number.
+CREATE TABLE IF NOT EXISTS system_counters (
+    counter_name VARCHAR(80) PRIMARY KEY,
+    current_value BIGINT NOT NULL CHECK (current_value >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_counters (counter_name, current_value)
+SELECT
+    'voucher_number',
+    GREATEST(
+        COALESCE(MAX(voucher_number::BIGINT)
+            FILTER (WHERE voucher_number ~ '^[0-9]+$'), 0),
+        140
+    )
+FROM vouchers
+ON CONFLICT (counter_name) DO UPDATE
+SET current_value = GREATEST(system_counters.current_value, EXCLUDED.current_value),
+    updated_at = NOW();
 
 CREATE TABLE IF NOT EXISTS payments (
     id BIGSERIAL PRIMARY KEY,
@@ -337,9 +367,26 @@ ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS cheque_number VARCHAR(80),
     ADD COLUMN IF NOT EXISTS particulars TEXT,
     ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS withholding_tax_rate NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS withholding_tax_amount NUMERIC(14, 2)
+        GENERATED ALWAYS AS (ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+    ADD COLUMN IF NOT EXISTS net_cheque_amount NUMERIC(14, 2)
+        GENERATED ALWAYS AS (payment_amount - ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+    ADD COLUMN IF NOT EXISTS bank_name VARCHAR(120),
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'vouchers_withholding_tax_rate_check'
+    ) THEN
+        ALTER TABLE vouchers
+            ADD CONSTRAINT vouchers_withholding_tax_rate_check
+            CHECK (withholding_tax_rate IN (0, 0.0100));
+    END IF;
+END $$;
 
 ALTER TABLE payments
     ADD COLUMN IF NOT EXISTS reversed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,

@@ -75,6 +75,17 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
   printWindow.opener = null;
 
   const amount = Number(voucher.amountApplied || 0);
+  const withholdingTaxRate = Number(voucher.withholdingTaxRate || 0);
+  const withholdingTaxAmount = Number.isFinite(Number(voucher.withholdingTaxAmount))
+    ? Number(voucher.withholdingTaxAmount)
+    : Math.round(amount * withholdingTaxRate * 100) / 100;
+  const netChequeAmount = Number.isFinite(Number(voucher.netChequeAmount))
+    ? Number(voucher.netChequeAmount)
+    : Math.max(amount - withholdingTaxAmount, 0);
+  const totalCreditAmount = Math.round((withholdingTaxAmount + netChequeAmount) * 100) / 100;
+  // The printed Amount and its words must describe the same cheque value.
+  const voucherDisplayAmount = netChequeAmount;
+  const bankName = voucher.bankName?.trim() || "Bank used";
   const supplierName = supplier?.name || voucher.supplierName || "";
   const contactPerson = supplier?.contactPerson || "";
   const purchaseOrder = transaction?.purchaseOrder || voucher.purchaseOrder || "";
@@ -85,7 +96,9 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
     purchaseOrder && purchaseOrder !== "—" ? `P.O. ${purchaseOrder}` : "",
     collectionReceipt && collectionReceipt !== "—" ? `C.R. ${collectionReceipt}` : ""
   ].filter(Boolean).join(" / ");
-  const particulars = voucher.particulars?.trim() || `Payment for ${paymentReference || "supplier transaction"}`;
+  const particulars = paymentReference
+    ? `Payment for ${paymentReference}`
+    : (voucher.particulars?.trim() || "Payment for supplier transaction");
 
   printWindow.document.open();
   printWindow.document.write(`<!doctype html>
@@ -157,9 +170,9 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
     <section class="voucher-body">
       <div class="top-grid">
         <div><strong>Contact person:</strong> ${escapeHtml(contactPerson)}</div>
-        <div class="amount-value"><strong>Amount:</strong> ${escapeHtml(formatMoney(amount))}</div>
+        <div class="amount-value"><strong>Amount</strong></div>
         <div class="payment-for">${escapeHtml(particulars)}</div>
-        <div class="amount-value">${escapeHtml(formatMoney(amount))}</div>
+        <div class="amount-value">${escapeHtml(formatMoney(voucherDisplayAmount))}</div>
       </div>
       <div class="body-grid">
         <div class="distribution">
@@ -167,15 +180,15 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
           <table>
             <thead><tr><th>Description</th><th>Debit</th><th>Credit</th></tr></thead>
             <tbody>
-              <tr><td>Accounts payable – trade</td><td class="numeric">${escapeHtml(formatMoney(amount))}</td><td></td></tr>
-              <tr><td>${escapeHtml(paymentReference || "Supplier transaction")}</td><td></td><td class="numeric">${escapeHtml(formatMoney(amount))}</td></tr>
-              <tr><td>&nbsp;</td><td></td><td></td></tr>
-              <tr><td>&nbsp;</td><td></td><td></td></tr>
+              <tr><td>Accounts payable – trade</td><td class="numeric">${escapeHtml(formatMoney(totalCreditAmount))}</td><td></td></tr>
+              <tr><td>${escapeHtml(paymentReference || "Supplier transaction")}</td><td></td><td></td></tr>
+              <tr><td>Withholding tax (1%)</td><td></td><td class="numeric">${escapeHtml(formatMoney(withholdingTaxAmount))}</td></tr>
+              <tr><td>${escapeHtml(bankName)}</td><td></td><td class="numeric">${escapeHtml(formatMoney(netChequeAmount))}</td></tr>
             </tbody>
           </table>
         </div>
         <div class="details">
-          <p class="words"><strong>Pesos:</strong> ${escapeHtml(moneyInWords(amount))}</p>
+          <p class="words"><strong>Pesos:</strong> ${escapeHtml(moneyInWords(voucherDisplayAmount))}</p>
           <div class="cheque-fields">
             <div class="field-line"><span>Cheque date</span><span class="line-value">${escapeHtml(formatDate(voucher.chequeDate))}</span></div>
             <div class="field-line"><span>Cheque no.</span><span class="line-value">${escapeHtml(voucher.chequeNumber || "")}</span></div>
@@ -186,8 +199,8 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
     </section>
     <footer class="signatures">
       <div class="signature"><span>Prepared by</span><div class="signature-name">${escapeHtml(preparedBy || "")}</div></div>
-      <div class="signature"><span>Checked by</span><div class="signature-name"></div></div>
-      <div class="signature"><span>Approved by</span><div class="signature-name"></div></div>
+      <div class="signature"><span>Checked by</span><div class="signature-name">Lucia Baranda</div></div>
+      <div class="signature"><span>Approved by</span><div class="signature-name">Randy D. Deauna</div></div>
     </footer>
   </article>
 </body>

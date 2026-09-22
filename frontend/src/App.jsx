@@ -255,7 +255,16 @@ export default function App() {
   }
 
   async function createVoucher(values) {
-    if (USE_DEMO_DATA) setVouchers((current) => [...current, { ...values, id: createRecordId("voucher"), amountApplied: Number(values.amountApplied), createdAt: new Date().toISOString() }]);
+    if (USE_DEMO_DATA) {
+      setVouchers((current) => {
+        const highestNumber = current.reduce((highest, voucher) => {
+          const number = Number.parseInt(String(voucher.voucherNumber || "").replace(/\D/g, ""), 10);
+          return Number.isFinite(number) ? Math.max(highest, number) : highest;
+        }, 140);
+        const voucherNumber = String(highestNumber + 1).padStart(6, "0");
+        return [...current, { ...values, voucherNumber, id: createRecordId("voucher"), amountApplied: Number(values.amountApplied), createdAt: new Date().toISOString() }];
+      });
+    }
     else { await createVoucherRequest(values); await refreshBackendData(); }
     setAppMessage(values.status === "Issued" ? "Voucher issued and payment applied." : "Voucher draft created.");
   }

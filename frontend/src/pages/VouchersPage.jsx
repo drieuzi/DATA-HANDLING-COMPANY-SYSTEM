@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import VoucherEditorDialog from "../components/VoucherEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
-import { formatRecordDate, getNextVoucherNumber } from "../utils/recordHelpers.js";
+import { formatRecordDate } from "../utils/recordHelpers.js";
 import { downloadVoucherForPrint } from "../utils/voucherDocument.js";
+import { getNextVoucherNumber } from "../services/voucherApi.js";
 
 function activityDetails(details) {
   if (!details) return "";
@@ -21,6 +22,8 @@ export default function VouchersPage({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
+  const [nextVoucherNumber, setNextVoucherNumber] = useState("");
+  const [loadingVoucherNumber, setLoadingVoucherNumber] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const isAdmin = user?.role === "admin";
@@ -43,6 +46,21 @@ export default function VouchersPage({
     const reason = window.prompt(promptText);
     if (!reason?.trim()) return;
     runAction(() => callback(reason.trim()));
+  }
+
+  async function openVoucherForm() {
+    setLoadingVoucherNumber(true);
+    setNextVoucherNumber("");
+    try {
+      const seriesNumber = await getNextVoucherNumber();
+      if (!seriesNumber) throw new Error("The next voucher number was not returned by the server.");
+      setNextVoucherNumber(seriesNumber);
+      setDialogOpen(true);
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setLoadingVoucherNumber(false);
+    }
   }
 
   function downloadVoucher(voucher) {
@@ -72,7 +90,9 @@ export default function VouchersPage({
         <section className="voucher-card">
           <div className="management-heading">
             <div><p>Payment records</p><h2>Voucher Cheques</h2></div>
-            <button className="primary-action" type="button" onClick={() => setDialogOpen(true)}>+ Create Voucher</button>
+            <button className="primary-action" type="button" onClick={openVoucherForm} disabled={loadingVoucherNumber}>
+              {loadingVoucherNumber ? "Loading voucher number…" : "+ Create Voucher"}
+            </button>
           </div>
           <div className="records-toolbar">
             <input type="search" placeholder="Search voucher, supplier, P.O., or S.I.…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -86,7 +106,7 @@ export default function VouchersPage({
                 <td><strong>{voucher.voucherNumber}</strong></td><td>{voucher.supplierName}</td><td>{voucher.purchaseOrder}</td><td>{voucher.salesInvoice}</td><td>{formatRecordDate(voucher.voucherDate)}</td><td>{formatCurrency(voucher.amountApplied)}</td>
                 <td><span className={`voucher-status voucher-status--${effectiveStatus.toLowerCase()}`}>{effectiveStatus}</span></td>
                 <td><div className="row-actions">
-                  {!isAdmin && !voucher.deletedAt && effectiveStatus !== "Cancelled" && <button type="button" onClick={() => setEditingVoucher(voucher)}>Edit</button>}
+                  {!isAdmin && !voucher.deletedAt && <button type="button" onClick={() => setEditingVoucher(voucher)}>Edit</button>}
                   {!voucher.deletedAt && <button type="button" onClick={() => downloadVoucher(voucher)}>Download</button>}
                   {!voucher.deletedAt && effectiveStatus === "Draft" && <button type="button" onClick={() => runAction(() => onIssue(voucher.id))}>Issue</button>}
                   {isAdmin && !voucher.deletedAt && effectiveStatus !== "Cancelled" && <button type="button" onClick={() => requestReason("Reason for cancelling this voucher:", (reason) => onCancel(voucher.id, reason))}>Cancel</button>}
@@ -100,8 +120,8 @@ export default function VouchersPage({
         </section>
         {isAdmin && <section className="activity-card"><h2>Recent Audit Activity</h2>{auditLog.length ? <ul>{auditLog.slice(0, 8).map((item) => <li key={item.id}><div><strong>{item.action}</strong><span>{activityDetails(item.details)}</span></div><time>{new Date(item.createdAt).toLocaleString("en-PH")}</time></li>)}</ul> : <p>No activity yet.</p>}</section>}
       </main>
-      <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={getNextVoucherNumber(vouchers)} suppliers={suppliers} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />
-      <VoucherEditorDialog isOpen={Boolean(editingVoucher)} voucherNumber={editingVoucher?.voucherNumber || ""} voucher={editingVoucher} suppliers={suppliers} onSave={async (values) => { await onEdit(editingVoucher.id, values); setEditingVoucher(null); }} onClose={() => setEditingVoucher(null)} />
+      <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={nextVoucherNumber} suppliers={suppliers} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />
+      <VoucherEditorDialog isOpen={Boolean(editingVoucher)} voucher={editingVoucher} suppliers={suppliers} onSave={async (values) => { await onEdit(editingVoucher.id, values); setEditingVoucher(null); }} onClose={() => setEditingVoucher(null)} />
     </div>
   );
 }
