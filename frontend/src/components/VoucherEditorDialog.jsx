@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const currentDate = () => new Date().toISOString().slice(0, 10);
+const formatVoucherAmount = (value) => new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+}).format(Number(value || 0));
 
-export default function VoucherEditorDialog({ isOpen, voucherNumber = "", voucher = null, suppliers, onSave, onClose }) {
+export default function VoucherEditorDialog({ isOpen, voucherNumber = "", voucher = null, suppliers, allowCancellation = true, onSave, onClose }) {
   const dialogRef = useRef(null);
   const [fields, setFields] = useState({});
   const [message, setMessage] = useState("");
@@ -70,8 +76,8 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
       setMessage("Supplier, transaction, cheque number, bank used, and a valid amount are required.");
       return;
     }
-    if (amountApplied > maximumPayment) {
-      setMessage("Applied amount cannot be greater than the payable balance.");
+    if (amountApplied !== maximumPayment) {
+      setMessage("Partial payments are not allowed. The voucher must cover the full payable balance.");
       return;
     }
     setSaving(true);
@@ -109,19 +115,19 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
         <label>Payment Date<input type="date" name="paymentDate" value={fields.paymentDate || ""} onChange={updateField} required /></label>
         <label>Cheque Number<input name="chequeNumber" value={fields.chequeNumber || ""} onChange={updateField} required /></label>
         <label>Cheque Date<input type="date" name="chequeDate" value={fields.chequeDate || ""} onChange={updateField} required /></label>
-        <label>Payment Amount<input type="number" min="0.01" max={maximumPayment || undefined} step="0.01" name="amountApplied" value={fields.amountApplied || ""} onChange={updateField} required /></label>
+        <label>Full Payment Amount<input value={formatVoucherAmount(fields.amountApplied)} readOnly aria-readonly="true" required /></label>
         <label className="voucher-tax-toggle record-form__wide">
           <input type="checkbox" name="applyWithholdingTax" checked={Boolean(fields.applyWithholdingTax)} onChange={updateField} />
           Apply 1% withholding tax
         </label>
-        <label>Withholding Tax (1%)<input value={withholdingTaxAmount.toFixed(2)} readOnly aria-readonly="true" /></label>
+        <label>Withholding Tax (1%)<input value={formatVoucherAmount(withholdingTaxAmount)} readOnly aria-readonly="true" /></label>
         <label>Bank Used<input name="bankName" value={fields.bankName || ""} onChange={updateField} placeholder="Example: BPI" required /></label>
-        <label>Net Cheque Amount<input value={netChequeAmount.toFixed(2)} readOnly aria-readonly="true" /></label>
+        <label>Net Cheque Amount<input value={formatVoucherAmount(netChequeAmount)} readOnly aria-readonly="true" /></label>
         <label>Status
-          <select name="status" value={fields.status || "Draft"} onChange={updateField}>
+          <select name="status" value={fields.status || "Draft"} onChange={updateField} disabled={Boolean(voucher && voucher.status === "Cancelled" && !allowCancellation)}>
             <option>Draft</option>
             <option>Issued</option>
-            {voucher && <option>Cancelled</option>}
+            {voucher && (allowCancellation || voucher.status === "Cancelled") && <option>Cancelled</option>}
           </select>
         </label>
         <label className="record-form__wide">Particulars<textarea name="particulars" value={fields.particulars || ""} onChange={updateField} rows="3" /></label>

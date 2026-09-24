@@ -51,8 +51,8 @@ async function issueLockedVoucher(client, request, voucher) {
   const paymentAmount = Number(voucher.payment_amount);
   const balance = Number(transaction.balance);
   if (paymentAmount <= 0) throw new HttpError(400, "Payment must be greater than zero.");
-  if (paymentAmount > balance) {
-    throw new HttpError(409, `Payment cannot exceed the remaining balance of ${balance.toFixed(2)}.`);
+  if (paymentAmount !== balance) {
+    throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${balance.toFixed(2)}.`);
   }
 
   await client.query(
@@ -141,8 +141,8 @@ async function createVoucherWithPayment(request, values) {
     if (Number(transaction.supplier_id) !== Number(values.supplierId)) {
       throw new HttpError(400, "The selected supplier does not own that transaction.");
     }
-    if (Number(values.paymentAmount) > Number(transaction.balance)) {
-      throw new HttpError(409, "Payment cannot be greater than the transaction balance.");
+    if (Number(values.paymentAmount) !== Number(transaction.balance)) {
+      throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${Number(transaction.balance).toFixed(2)}.`);
     }
     const voucherNumber = await reserveVoucherNumber(client);
     const result = await client.query(
@@ -197,6 +197,11 @@ async function updateVoucherDetails(request, voucherId, values) {
   try {
     await client.query("BEGIN");
     const voucher = await lockVoucher(client, voucherId);
+    if (request.user.role === "admin"
+      && values.paymentStatus === "Cancelled"
+      && voucher.payment_status !== "Cancelled") {
+      throw new HttpError(403, "Admin accounts do not have permission to cancel vouchers.");
+    }
     if (Number(voucher.supplier_id) !== Number(values.supplierId)
       || Number(voucher.supplier_transaction_id) !== Number(values.supplierTransactionId)) {
       throw new HttpError(409, "The linked supplier and transaction cannot be changed after the voucher is created.");
@@ -212,8 +217,8 @@ async function updateVoucherDetails(request, voucherId, values) {
       const payment = paymentResult.rows[0];
       if (!payment) throw new HttpError(409, "The issued voucher payment history could not be found.");
       availableAmount = Number(transaction.balance) + Number(payment.amount);
-      if (Number(values.paymentAmount) > availableAmount) {
-        throw new HttpError(409, `Payment cannot exceed the available balance of ${availableAmount.toFixed(2)}.`);
+      if (Number(values.paymentAmount) !== availableAmount) {
+        throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full transaction amount of ${availableAmount.toFixed(2)}.`);
       }
       await client.query(
         `UPDATE payments SET amount = $1, payment_date = $2 WHERE id = $3`,
@@ -234,8 +239,8 @@ async function updateVoucherDetails(request, voucherId, values) {
       );
     }
 
-    if (values.paymentStatus !== "Cancelled" && Number(values.paymentAmount) > availableAmount) {
-      throw new HttpError(409, `Payment cannot exceed the available balance of ${availableAmount.toFixed(2)}.`);
+    if (values.paymentStatus !== "Cancelled" && Number(values.paymentAmount) !== availableAmount) {
+      throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full transaction amount of ${availableAmount.toFixed(2)}.`);
     }
 
     const storedStatus = values.paymentStatus === "Issued" && voucher.payment_status !== "Issued"
@@ -277,28 +282,82 @@ async function updateVoucherDetails(request, voucherId, values) {
   } finally { client.release(); }
 }
 
-async function cancelVoucherPayment(request, voucherId, reason) {
+async function deleteVoucherForHistory(request, voucherId, reason) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const voucher = await lockVoucher(client, voucherId);
-    if (voucher.payment_status === "Cancelled") throw new HttpError(409, "Voucher is already cancelled.");
+    const allowedStatuses = request.user.role === "admin"
+      ? ["Draft", "Issued"]
+      : ["Draft", "Issued", "Cancelled"];
+
+    if (!allowedStatuses.includes(voucher.payment_status)) {
+      throw new HttpError(
+        409,
+        request.user.role === "admin"
+          ? "Only Draft or Issued vouchers can be deleted from the active records."
+          : "This voucher cannot be deleted."
+      );
+    }
 
     if (voucher.payment_status === "Issued") {
       await reverseIssuedVoucher(client, request, voucher, reason);
     }
 
-    await client.query(
-      `UPDATE vouchers SET payment_status = 'Cancelled', cancelled_at = NOW()
-       WHERE id = $1`,
-      [voucher.id]
+    const result = await client.query(
+      `UPDATE vouchers SET payment_status = 'Deleted', deleted_at = NOW(),
+         deleted_by = $1, deletion_reason = $2, restore_allowed = TRUE,
+         permanently_deleted_by = NULL, permanently_deleted_at = NULL,
+         updated_at = NOW()
+       WHERE id = $3 AND deleted_at IS NULL
+       RETURNING id, voucher_number, deleted_at`,
+      [request.user.id, reason, voucher.id]
     );
-    await writeAudit(client, request, "VOUCHER_CANCELLED", "voucher", voucher.id, {
+    const deletedVoucher = result.rows[0];
+    await writeAudit(client, request, "VOUCHER_DELETED", "voucher", voucher.id, {
       voucherNumber: voucher.voucher_number,
       previousStatus: voucher.payment_status,
-      reason
+      status: "Deleted",
+      deletionMode: "restorable",
+      reason,
+      deletedBy: request.user.fullName || request.user.username,
+      deletedAt: deletedVoucher.deleted_at,
+      actionPerformed: "Voucher moved from active records to historical deleted records"
     });
     await client.query("COMMIT");
+    return deletedVoucher;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteVoucher(request, voucherId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE vouchers SET restore_allowed = FALSE,
+         permanently_deleted_by = $1, permanently_deleted_at = NOW(),
+         updated_at = NOW()
+       WHERE id = $2 AND payment_status = 'Deleted'
+         AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING id, voucher_number, permanently_deleted_at`,
+      [request.user.id, voucherId]
+    );
+    const voucher = result.rows[0];
+    if (!voucher) {
+      throw new HttpError(404, "Restorable deleted voucher not found.");
+    }
+    await writeAudit(client, request, "VOUCHER_PERMANENTLY_DELETED", "voucher", voucher.id, {
+      voucherNumber: voucher.voucher_number,
+      deletionMode: "unrestorable",
+      permanentlyDeletedBy: request.user.fullName || request.user.username,
+      permanentlyDeletedAt: voucher.permanently_deleted_at,
+      actionPerformed: "Restore permission permanently removed"
+    });
+    await client.query("COMMIT");
+    return voucher;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -306,8 +365,9 @@ async function cancelVoucherPayment(request, voucherId, reason) {
 }
 
 module.exports = {
-  cancelVoucherPayment,
   createVoucherWithPayment,
+  deleteVoucherForHistory,
   issueVoucherPayment,
+  permanentlyDeleteVoucher,
   updateVoucherDetails
 };

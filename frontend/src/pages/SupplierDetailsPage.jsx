@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
+import PageBackButton from "../components/PageBackButton.jsx";
 import TransactionEditorDialog from "../components/TransactionEditorDialog.jsx";
 import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
@@ -9,6 +10,8 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [companyEditorOpen, setCompanyEditorOpen] = useState(false);
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const activeTransactions = supplier.transactions.filter((transaction) => !transaction.deletedAt);
   const summary = activeTransactions.reduce(
@@ -18,17 +21,33 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
     }),
     { amount: 0, balance: 0 }
   );
+  const filteredTransactions = useMemo(() => supplier.transactions.filter((transaction) => {
+    if (!isAdmin && transaction.deletedAt) return false;
+    const effectiveStatus = transaction.deletedAt ? "Deleted" : transaction.billingStatus;
+    const matchesStatus = transactionStatus === "All" || effectiveStatus === transactionStatus;
+    const searchableDetails = [
+      supplier.name,
+      transaction.voucherNumber,
+      transaction.salesInvoice,
+      transaction.purchaseOrder,
+      transaction.collectionReceipt,
+      transaction.voucherDate,
+      transaction.amount,
+      transaction.balance,
+      effectiveStatus
+    ].filter(Boolean).join(" ").toLowerCase();
+    return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
+  }), [isAdmin, supplier.transactions, transactionSearch, transactionStatus]);
 
   return (
     <div className="app-page supplier-page supplier-details-page">
       <TrackRecordHeader
         title={`${supplier.name} Track Record`}
-        backLabel="Back to supplier list"
-        onBack={onBack}
       />
 
       <main className="supplier-details-main">
-        <div className="management-toolbar"><span>Company controls</span><div className="row-actions">{!isAdmin && <button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Supplier</button>}<button className="danger-action" type="button" onClick={async () => { if (!window.confirm(`Delete ${supplier.name}? This is only allowed after its transactions are deleted.`)) return; try { await onDeleteSupplier(supplier.id, "Deleted from supplier track record"); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Supplier</button></div></div>
+        <PageBackButton label="Back to Supplier Names and Records" onClick={onBack} />
+        <div className="management-toolbar"><span>Company controls</span><div className="row-actions"><button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Supplier</button><button className="danger-action" type="button" onClick={async () => { if (!window.confirm(`Delete ${supplier.name}? ${isAdmin ? "This will permanently hide the record while keeping its audit history." : "An admin can restore this record later."}`)) return; try { await onDeleteSupplier(supplier.id, "Deleted from supplier track record"); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Supplier</button></div></div>
         <section className="supplier-summary" aria-label={`${supplier.name} summary`}>
           <div>
             <span>Supplier</span>
@@ -57,6 +76,26 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
             <div className="heading-actions"><span>{activeTransactions.length} active record(s)</span><button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button></div>
           </div>
 
+          <div className="detail-record-filters">
+            <label>
+              <span>Search transactions</span>
+              <input
+                type="search"
+                placeholder="Search voucher, P.O., S.I., or C.R."
+                value={transactionSearch}
+                onChange={(event) => setTransactionSearch(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Billing status</span>
+              <select value={transactionStatus} onChange={(event) => setTransactionStatus(event.target.value)}>
+                <option>All</option>
+                <option>Not Paid</option>
+                <option>Paid</option>
+              </select>
+            </label>
+          </div>
+
           <div className="transactions-table-wrapper">
             <table className="transactions-table">
               <thead>
@@ -73,7 +112,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                 </tr>
               </thead>
               <tbody>
-                {supplier.transactions.map((transaction) => (
+                {filteredTransactions.length ? filteredTransactions.map((transaction) => (
                   <tr className={transaction.deletedAt ? "is-deleted" : ""} key={transaction.id}>
                     <td>{transaction.voucherNumber || "—"}</td>
                     <td>{formatRecordDate(transaction.voucherDate)}</td>
@@ -84,20 +123,20 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                     <td>{formatCurrency(transaction.balance)}</td>
                     <td>
                       <span
-                        className={`table-status table-status--${transaction.billingStatus
+                        className={`table-status table-status--${(transaction.deletedAt ? "Deleted" : transaction.billingStatus)
                           .toLowerCase()
                           .replaceAll(" ", "-")}`}
                       >
-                        {transaction.billingStatus}
+                        {transaction.deletedAt ? "Deleted" : transaction.billingStatus}
                       </span>
                     </td>
                     <td><div className="row-actions">
-                      {!isAdmin && !transaction.deletedAt && <button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button>}
+                      {!transaction.deletedAt && <button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button>}
                       {!transaction.deletedAt && <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt("Reason for deleting this transaction:"); if (!reason?.trim()) return; try { await onDeleteTransaction(transaction.id, reason.trim()); } catch (error) { window.alert(error.message); } }}>Delete</button>}
-                      {isAdmin && transaction.deletedAt && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
+                      {isAdmin && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                ))}
+                )) : <tr><td className="detail-records-empty" colSpan="9">No supplier transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>

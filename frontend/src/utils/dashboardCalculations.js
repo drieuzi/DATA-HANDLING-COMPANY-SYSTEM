@@ -10,7 +10,6 @@ export function normalizeDashboardData(data) {
     payables: toNumber(data.payables),
     totalPurchases: toNumber(data.totalPurchases),
     currentMonthExpenses: toNumber(data.currentMonthExpenses),
-    partiallyPaidTransactions: toNumber(data.partiallyPaidTransactions),
     paidTransactions: toNumber(data.paidTransactions),
     notPaidTransactions: toNumber(data.notPaidTransactions),
     voucherCounts: data.voucherCounts || { total: 0, draft: 0, issued: 0, cancelled: 0, deleted: 0 },

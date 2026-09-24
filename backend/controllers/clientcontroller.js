@@ -18,6 +18,7 @@ function mapTransaction(row) {
     billingStatus: row.billing_status,
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
+    restoreAllowed: row.restore_allowed !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -26,7 +27,6 @@ function mapTransaction(row) {
 function companyStatus(transactions) {
   if (!transactions.length) return "Not Paid";
   if (transactions.every((item) => item.billingStatus === "Paid")) return "Paid";
-  if (transactions.some((item) => item.billingStatus !== "Not Paid")) return "Partially Paid";
   return "Not Paid";
 }
 
@@ -48,6 +48,7 @@ function mapClient(row, transactions = []) {
     isActive: row.is_active,
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
+    restoreAllowed: row.restore_allowed !== false,
     paymentDate: latestPaymentDate,
     billingStatus: companyStatus(activeTransactions),
     transactions,
@@ -60,13 +61,13 @@ async function loadClients(includeDeleted = false) {
   const [clientsResult, transactionsResult] = await Promise.all([
     pool.query(
       `SELECT * FROM clients
-       WHERE ($1::BOOLEAN OR deleted_at IS NULL)
+       WHERE deleted_at IS NULL OR ($1::BOOLEAN AND restore_allowed = TRUE)
        ORDER BY deleted_at NULLS FIRST, is_active DESC, name`,
       [includeDeleted]
     ),
     pool.query(
       `SELECT * FROM client_transactions
-       WHERE ($1::BOOLEAN OR deleted_at IS NULL)
+       WHERE deleted_at IS NULL OR ($1::BOOLEAN AND restore_allowed = TRUE)
        ORDER BY transaction_date DESC, created_at DESC, id DESC`,
       [includeDeleted]
     )
@@ -164,14 +165,16 @@ async function deleteClient(request, response, next) {
     if (linked.rows[0].count > 0) throw new HttpError(409, "Delete the client's active transactions before deleting the client.");
     const result = await client.query(
       `UPDATE clients SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, is_active = FALSE
-       WHERE id = $3 AND deleted_at IS NULL RETURNING id, name`,
-      [request.user.id, reason, clientId]
+         deletion_reason = $2, is_active = FALSE, restore_allowed = $3
+       WHERE id = $4 AND deleted_at IS NULL RETURNING id, name`,
+      [request.user.id, reason, request.user.role !== "admin", clientId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Client not found.");
-    await writeAudit(client, request, "CLIENT_DELETED", "client", clientId, { reason, name: result.rows[0].name });
+    await writeAudit(client, request, "CLIENT_DELETED", "client", clientId, {
+      reason, name: result.rows[0].name, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+    });
     await client.query("COMMIT");
-    response.json({ message: "Client moved to deleted records." });
+    response.json({ message: request.user.role === "admin" ? "Client permanently hidden. Audit history was kept." : "Client moved to deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -185,8 +188,8 @@ async function restoreClient(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE clients SET deleted_at = NULL, deleted_by = NULL,
-         deletion_reason = NULL, is_active = TRUE
-       WHERE id = $1 AND deleted_at IS NOT NULL RETURNING *`,
+         deletion_reason = NULL, is_active = TRUE, restore_allowed = TRUE
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE RETURNING *`,
       [clientId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted client not found.");
@@ -249,7 +252,9 @@ async function updateTransaction(request, response, next) {
       [transactionId]
     );
     const paidAmount = Number(paidResult.rows[0].paid);
-    if (Number(values.amount) < paidAmount) throw new HttpError(409, "The amount cannot be lower than payments already received.");
+    if (paidAmount > 0 && Number(values.amount) !== paidAmount) {
+      throw new HttpError(409, "A paid transaction amount must remain equal to its completed payment.");
+    }
     const result = await client.query(
       `UPDATE client_transactions SET transaction_date = $1,
          sales_invoice_number = $2, purchase_order_number = $3,
@@ -275,14 +280,17 @@ async function deleteTransaction(request, response, next) {
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE client_transactions SET deleted_at = NOW(), deleted_by = $1, deletion_reason = $2
-       WHERE id = $3 AND deleted_at IS NULL RETURNING id`,
-      [request.user.id, reason, transactionId]
+      `UPDATE client_transactions SET deleted_at = NOW(), deleted_by = $1,
+         deletion_reason = $2, restore_allowed = $3
+       WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, request.user.role !== "admin", transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Client transaction not found.");
-    await writeAudit(client, request, "CLIENT_TRANSACTION_DELETED", "client_transaction", transactionId, { reason });
+    await writeAudit(client, request, "CLIENT_TRANSACTION_DELETED", "client_transaction", transactionId, {
+      reason, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+    });
     await client.query("COMMIT");
-    response.json({ message: "Client transaction moved to deleted records." });
+    response.json({ message: request.user.role === "admin" ? "Client transaction permanently hidden. Audit history was kept." : "Client transaction moved to deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -295,9 +303,11 @@ async function restoreTransaction(request, response, next) {
     const transactionId = validate.id(request.params.id, "Transaction ID");
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE client_transactions ct SET deleted_at = NULL, deleted_by = NULL, deletion_reason = NULL
+      `UPDATE client_transactions ct SET deleted_at = NULL, deleted_by = NULL,
+         deletion_reason = NULL, restore_allowed = TRUE
        FROM clients c WHERE ct.id = $1 AND ct.client_id = c.id
-         AND ct.deleted_at IS NOT NULL AND c.deleted_at IS NULL RETURNING ct.*`,
+         AND ct.deleted_at IS NOT NULL AND ct.restore_allowed = TRUE
+         AND c.deleted_at IS NULL RETURNING ct.*`,
       [transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted transaction or active client not found.");
@@ -326,8 +336,8 @@ async function addPayment(request, response, next) {
     );
     const transaction = locked.rows[0];
     if (!transaction) throw new HttpError(404, "Active client transaction not found.");
-    if (Number(paymentAmount) > Number(transaction.balance)) {
-      throw new HttpError(409, `Payment cannot exceed the remaining balance of ${Number(transaction.balance).toFixed(2)}.`);
+    if (Number(paymentAmount) !== Number(transaction.balance)) {
+      throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${Number(transaction.balance).toFixed(2)}.`);
     }
     const payment = await client.query(
       `INSERT INTO client_payments (
@@ -377,7 +387,7 @@ async function listReceivables(request, response, next) {
   try {
     const clientId = request.query.clientId ? validate.id(request.query.clientId, "Client ID") : null;
     const status = validate.text(request.query.status, "Status", { max: 20 });
-    if (status && !["Not Paid", "Partially Paid"].includes(status)) throw new HttpError(400, "Receivable status must be Not Paid or Partially Paid.");
+    if (status && status !== "Not Paid") throw new HttpError(400, "Receivable status must be Not Paid.");
     const result = await pool.query(
       `SELECT * FROM receivable_records
        WHERE ($1::BIGINT IS NULL OR client_id = $1)

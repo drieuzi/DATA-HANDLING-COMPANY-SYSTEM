@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (BTRIM(name) <> ''),
@@ -83,7 +84,6 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
     billing_status VARCHAR(20) GENERATED ALWAYS AS (
         CASE
             WHEN balance = 0 THEN 'Paid'
-            WHEN balance < amount THEN 'Partially Paid'
             ELSE 'Not Paid'
         END
     ) STORED,
@@ -91,12 +91,15 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
     deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT supplier_transactions_positive_amount
         CHECK (amount > 0),
     CONSTRAINT supplier_transactions_valid_balance
         CHECK (balance >= 0 AND balance <= amount),
+    CONSTRAINT supplier_transactions_full_or_unpaid
+        CHECK (balance = 0 OR balance = amount),
     CONSTRAINT supplier_transactions_identification_required
         CHECK (
             COALESCE(BTRIM(sales_invoice_number), '') <> ''
@@ -143,7 +146,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
         GENERATED ALWAYS AS (payment_amount - ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
     bank_name VARCHAR(120),
     payment_status VARCHAR(20) NOT NULL DEFAULT 'Draft'
-        CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled')),
+        CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled', 'Deleted')),
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     issued_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     issued_at TIMESTAMPTZ,
@@ -151,6 +154,9 @@ CREATE TABLE IF NOT EXISTS vouchers (
     deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    permanently_deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    permanently_deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT vouchers_positive_payment_amount
@@ -251,6 +257,7 @@ CREATE TABLE IF NOT EXISTS clients (
     deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (BTRIM(name) <> '')
@@ -279,7 +286,6 @@ CREATE TABLE IF NOT EXISTS client_transactions (
     billing_status VARCHAR(20) GENERATED ALWAYS AS (
         CASE
             WHEN balance = 0 THEN 'Paid'
-            WHEN balance < amount THEN 'Partially Paid'
             ELSE 'Not Paid'
         END
     ) STORED,
@@ -287,10 +293,12 @@ CREATE TABLE IF NOT EXISTS client_transactions (
     deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT client_transactions_positive_amount CHECK (amount > 0),
     CONSTRAINT client_transactions_valid_balance CHECK (balance >= 0 AND balance <= amount),
+    CONSTRAINT client_transactions_full_or_unpaid CHECK (balance = 0 OR balance = amount),
     CONSTRAINT client_transactions_identification_required CHECK (
         COALESCE(BTRIM(sales_invoice_number), '') <> ''
         OR COALESCE(BTRIM(purchase_order_number), '') <> ''
@@ -306,6 +314,29 @@ CREATE INDEX IF NOT EXISTS client_transactions_balance_index
 
 CREATE INDEX IF NOT EXISTS client_transactions_status_index
     ON client_transactions (billing_status);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'supplier_transactions_full_or_unpaid'
+          AND conrelid = 'supplier_transactions'::REGCLASS
+    ) THEN
+        ALTER TABLE supplier_transactions
+            ADD CONSTRAINT supplier_transactions_full_or_unpaid
+            CHECK (balance = 0 OR balance = amount) NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'client_transactions_full_or_unpaid'
+          AND conrelid = 'client_transactions'::REGCLASS
+    ) THEN
+        ALTER TABLE client_transactions
+            ADD CONSTRAINT client_transactions_full_or_unpaid
+            CHECK (balance = 0 OR balance = amount) NOT VALID;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS client_payments (
     id BIGSERIAL PRIMARY KEY,
@@ -356,12 +387,23 @@ CREATE INDEX IF NOT EXISTS audit_logs_entity_index
 ALTER TABLE suppliers
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+    ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Deleted is a historical voucher state. It is excluded from live payment
+-- calculations but remains available to Admins until made unrestorable.
+ALTER TABLE vouchers
+    DROP CONSTRAINT IF EXISTS vouchers_payment_status_check;
+
+ALTER TABLE vouchers
+    ADD CONSTRAINT vouchers_payment_status_check
+    CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled', 'Deleted'));
 
 ALTER TABLE supplier_transactions
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+    ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS cheque_number VARCHAR(80),
@@ -375,7 +417,66 @@ ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS bank_name VARCHAR(120),
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+    ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS permanently_deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS permanently_deleted_at TIMESTAMPTZ;
+
+UPDATE vouchers
+SET payment_status = 'Deleted'
+WHERE deleted_at IS NOT NULL
+  AND restore_allowed = TRUE
+  AND payment_status <> 'Deleted';
+
+ALTER TABLE clients
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE client_transactions
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Older installations generated a third "Partially Paid" state. Drop the
+-- dependent views/indexes once and replace that expression with two states.
+DROP VIEW IF EXISTS payable_records;
+DROP VIEW IF EXISTS receivable_records;
+DROP INDEX IF EXISTS supplier_transactions_status_index;
+DROP INDEX IF EXISTS client_transactions_status_index;
+
+DO $$
+DECLARE
+    expression_text TEXT;
+BEGIN
+    SELECT generation_expression INTO expression_text
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'supplier_transactions'
+      AND column_name = 'billing_status';
+    IF expression_text ILIKE '%Partially Paid%' THEN
+        ALTER TABLE supplier_transactions DROP COLUMN billing_status;
+        ALTER TABLE supplier_transactions ADD COLUMN billing_status VARCHAR(20)
+            GENERATED ALWAYS AS (
+                CASE WHEN balance = 0 THEN 'Paid' ELSE 'Not Paid' END
+            ) STORED;
+    END IF;
+
+    SELECT generation_expression INTO expression_text
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'client_transactions'
+      AND column_name = 'billing_status';
+    IF expression_text ILIKE '%Partially Paid%' THEN
+        ALTER TABLE client_transactions DROP COLUMN billing_status;
+        ALTER TABLE client_transactions ADD COLUMN billing_status VARCHAR(20)
+            GENERATED ALWAYS AS (
+                CASE WHEN balance = 0 THEN 'Paid' ELSE 'Not Paid' END
+            ) STORED;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS supplier_transactions_status_index
+    ON supplier_transactions (billing_status);
+
+CREATE INDEX IF NOT EXISTS client_transactions_status_index
+    ON client_transactions (billing_status);
 
 DO $$
 BEGIN

@@ -103,15 +103,105 @@
   text-transform: uppercase;
 }
 
+.page-back-navigation {
+  display: flex;
+  margin: 0 0 18px;
+}
+
+.page-back-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 16px;
+  border: 2px solid var(--black);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--black);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 5px 0 var(--border);
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.page-back-button > span:first-child {
+  font-size: 1.15rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.page-back-button:hover {
+  background: var(--orange-accent);
+  color: #20100b;
+  box-shadow: 0 3px 0 var(--orange-deep);
+  transform: translateY(-2px);
+}
+
+.page-back-button:hover > span:first-child {
+  transform: translateX(-3px);
+}
+
+.page-back-button:active {
+  box-shadow: 0 1px 0 var(--orange-deep);
+  transform: translateY(1px);
+}
+
+.detail-record-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 240px);
+  gap: 12px;
+  padding: 16px 22px;
+  border-top: 2px solid var(--border);
+  background: var(--yellow-light);
+}
+
+.detail-record-filters label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-record-filters input,
+.detail-record-filters select {
+  width: 100%;
+  padding: 11px 13px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.detail-records-empty {
+  padding: 28px !important;
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none !important;
+}
+
+.table-status--deleted {
+  background: var(--neutral);
+  color: var(--muted);
+}
+
 .supplier-row-controls { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .is-deleted { opacity: .58; }
 .is-deleted td { text-decoration: line-through; }
-
-.table-status--partially-paid { background: var(--orange-wash); color: var(--orange-deep); }
 
 @media (max-width: 640px) {
   .heading-actions { align-items: flex-start; flex-direction: column; }
   .record-form { grid-template-columns: 1fr; padding: 20px; }
   .record-form__wide { grid-column: auto; }
   .records-toolbar { grid-template-columns: 1fr; padding: 14px 18px; }
+  .detail-record-filters { grid-template-columns: 1fr; padding: 14px 16px; }
+  .page-back-button { width: 100%; justify-content: center; }
 }

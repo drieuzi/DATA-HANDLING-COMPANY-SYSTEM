@@ -1,10 +1,10 @@
 const express = require("express");
 const {
-  cancelVoucher, createVoucher, deleteVoucher, getVoucher, issueVoucher,
+  createVoucher, deleteVoucher, getVoucher, issueVoucher,
   listPayables, listVouchers, paymentHistory, previewNextVoucherNumber,
-  restoreVoucher, updateVoucher
+  permanentlyDeleteVoucher, restoreVoucher, updateVoucher
 } = require("../controllers/paymentcontroller");
-const { requireAdmin, requireAuth, requireUser } = require("../middleware/authmiddleware");
+const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -15,10 +15,10 @@ router.get("/vouchers/next-number", previewNextVoucherNumber);
 router.get("/vouchers/:id", getVoucher);
 router.get("/transactions/:id/payments", paymentHistory);
 router.post("/vouchers", createVoucher);
-router.patch("/vouchers/:id", requireUser, updateVoucher);
+router.patch("/vouchers/:id", requireStaff, updateVoucher);
 router.post("/vouchers/:id/issue", issueVoucher);
-router.post("/vouchers/:id/cancel", requireAdmin, cancelVoucher);
 router.delete("/vouchers/:id", deleteVoucher);
+router.delete("/vouchers/:id/permanent", requireAdmin, permanentlyDeleteVoucher);
 router.patch("/vouchers/:id/restore", requireAdmin, restoreVoucher);
 
 module.exports = router;

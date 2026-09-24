@@ -56,5 +56,6 @@ function allowRoles(...roles) {
 
 const requireAdmin = allowRoles("admin");
 const requireUser = allowRoles("user");
+const requireStaff = allowRoles("admin", "user");
 
-module.exports = { COOKIE_NAME, allowRoles, requireAuth, requireAdmin, requireUser };
+module.exports = { COOKIE_NAME, allowRoles, requireAuth, requireAdmin, requireStaff, requireUser };

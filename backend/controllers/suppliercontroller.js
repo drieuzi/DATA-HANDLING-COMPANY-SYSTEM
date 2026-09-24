@@ -20,6 +20,7 @@ function mapTransaction(row) {
     voucherStatus: row.voucher_status || null,
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
+    restoreAllowed: row.restore_allowed !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -28,7 +29,6 @@ function mapTransaction(row) {
 function companyStatus(transactions) {
   if (!transactions.length) return "Not Paid";
   if (transactions.every((item) => item.billingStatus === "Paid")) return "Paid";
-  if (transactions.some((item) => item.billingStatus !== "Not Paid")) return "Partially Paid";
   return "Not Paid";
 }
 
@@ -45,6 +45,7 @@ function mapSupplier(row, transactions = []) {
     isActive: row.is_active,
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
+    restoreAllowed: row.restore_allowed !== false,
     billingStatus: companyStatus(activeTransactions),
     transactions,
     createdAt: row.created_at,
@@ -55,7 +56,7 @@ function mapSupplier(row, transactions = []) {
 async function loadSuppliers(includeDeleted = false) {
   const suppliersResult = await pool.query(
     `SELECT * FROM suppliers
-     WHERE ($1::BOOLEAN OR deleted_at IS NULL)
+     WHERE deleted_at IS NULL OR ($1::BOOLEAN AND restore_allowed = TRUE)
      ORDER BY deleted_at NULLS FIRST, is_active DESC, name`,
     [includeDeleted]
   );
@@ -71,7 +72,7 @@ async function loadSuppliers(includeDeleted = false) {
        ORDER BY created_at DESC, id DESC
        LIMIT 1
      ) latest_voucher ON TRUE
-     WHERE ($1::BOOLEAN OR st.deleted_at IS NULL)
+     WHERE st.deleted_at IS NULL OR ($1::BOOLEAN AND st.restore_allowed = TRUE)
      ORDER BY st.created_at DESC, st.id DESC`,
     [includeDeleted]
   );
@@ -177,14 +178,16 @@ async function deleteSupplier(request, response, next) {
     }
     const result = await client.query(
       `UPDATE suppliers SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, is_active = FALSE
-       WHERE id = $3 AND deleted_at IS NULL RETURNING id, name`,
-      [request.user.id, reason, supplierId]
+         deletion_reason = $2, is_active = FALSE, restore_allowed = $3
+       WHERE id = $4 AND deleted_at IS NULL RETURNING id, name`,
+      [request.user.id, reason, request.user.role !== "admin", supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Supplier not found.");
-    await writeAudit(client, request, "SUPPLIER_DELETED", "supplier", supplierId, { reason, name: result.rows[0].name });
+    await writeAudit(client, request, "SUPPLIER_DELETED", "supplier", supplierId, {
+      reason, name: result.rows[0].name, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+    });
     await client.query("COMMIT");
-    response.json({ message: "Supplier moved to deleted records." });
+    response.json({ message: request.user.role === "admin" ? "Supplier permanently hidden. Audit history was kept." : "Supplier moved to deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -198,8 +201,8 @@ async function restoreSupplier(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE suppliers SET deleted_at = NULL, deleted_by = NULL,
-         deletion_reason = NULL, is_active = TRUE
-       WHERE id = $1 AND deleted_at IS NOT NULL RETURNING *`,
+         deletion_reason = NULL, is_active = TRUE, restore_allowed = TRUE
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE RETURNING *`,
       [supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted supplier not found.");
@@ -269,8 +272,8 @@ async function updateTransaction(request, response, next) {
       [transactionId]
     );
     const paidAmount = Number(paidResult.rows[0].paid);
-    if (Number(values.amount) < paidAmount) {
-      throw new HttpError(409, "The amount cannot be lower than payments already applied to this transaction.");
+    if (paidAmount > 0 && Number(values.amount) !== paidAmount) {
+      throw new HttpError(409, "A paid transaction amount must remain equal to its completed payment.");
     }
     const result = await client.query(
       `UPDATE supplier_transactions SET
@@ -307,14 +310,16 @@ async function deleteTransaction(request, response, next) {
     }
     const result = await client.query(
       `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2
-       WHERE id = $3 AND deleted_at IS NULL RETURNING id`,
-      [request.user.id, reason, transactionId]
+         deletion_reason = $2, restore_allowed = $3
+       WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, request.user.role !== "admin", transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Transaction not found.");
-    await writeAudit(client, request, "SUPPLIER_TRANSACTION_DELETED", "supplier_transaction", transactionId, { reason });
+    await writeAudit(client, request, "SUPPLIER_TRANSACTION_DELETED", "supplier_transaction", transactionId, {
+      reason, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+    });
     await client.query("COMMIT");
-    response.json({ message: "Transaction moved to deleted records." });
+    response.json({ message: request.user.role === "admin" ? "Transaction permanently hidden. Audit history was kept." : "Transaction moved to deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -328,10 +333,10 @@ async function restoreTransaction(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE supplier_transactions st SET deleted_at = NULL, deleted_by = NULL,
-         deletion_reason = NULL
+         deletion_reason = NULL, restore_allowed = TRUE
        FROM suppliers s
        WHERE st.id = $1 AND st.supplier_id = s.id
-         AND st.deleted_at IS NOT NULL AND s.deleted_at IS NULL
+         AND st.deleted_at IS NOT NULL AND st.restore_allowed = TRUE AND s.deleted_at IS NULL
        RETURNING st.*`,
       [transactionId]
     );
@@ -353,7 +358,7 @@ async function listTransactions(request, response, next) {
       `SELECT st.*, s.name AS supplier_name
        FROM supplier_transactions st JOIN suppliers s ON s.id = st.supplier_id
        WHERE ($1::BIGINT IS NULL OR st.supplier_id = $1)
-         AND ($2::BOOLEAN OR st.deleted_at IS NULL)
+         AND (st.deleted_at IS NULL OR ($2::BOOLEAN AND st.restore_allowed = TRUE))
        ORDER BY st.created_at DESC`,
       [supplierId, includeDeleted]
     );
@@ -367,7 +372,7 @@ async function getTransaction(request, response, next) {
     const result = await pool.query(
       `SELECT st.*, s.name AS supplier_name
        FROM supplier_transactions st JOIN suppliers s ON s.id = st.supplier_id
-       WHERE st.id = $1 AND (st.deleted_at IS NULL OR $2 = 'admin')`,
+       WHERE st.id = $1 AND (st.deleted_at IS NULL OR ($2 = 'admin' AND st.restore_allowed = TRUE))`,
       [transactionId, request.user.role]
     );
     if (!result.rows[0]) throw new HttpError(404, "Transaction not found.");

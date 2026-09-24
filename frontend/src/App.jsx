@@ -7,6 +7,7 @@ import ClientsPage from "./pages/ClientsPage.jsx";
 import ClientDetailsPage from "./pages/ClientDetailsPage.jsx";
 import VouchersPage from "./pages/VouchersPage.jsx";
 import TotalSalesPage from "./pages/TotalSalesPage.jsx";
+import TotalPurchasesPage from "./pages/TotalPurchasesPage.jsx";
 import AdminUsersPage from "./pages/AdminUsersPage.jsx";
 import { getCurrentUser, logout, USE_DEMO_DATA } from "./services/authApi.js";
 import {
@@ -15,9 +16,10 @@ import {
   updateSupplierTransaction
 } from "./services/supplierApi.js";
 import {
-  cancelVoucher as cancelVoucherRequest, createVoucher as createVoucherRequest,
+  createVoucher as createVoucherRequest,
   deleteVoucher as deleteVoucherRequest, issueVoucher as issueVoucherRequest,
-  listVouchers, restoreVoucher as restoreVoucherRequest,
+  listVouchers, permanentlyDeleteVoucher as permanentlyDeleteVoucherRequest,
+  restoreVoucher as restoreVoucherRequest,
   updateVoucher as updateVoucherRequest
 } from "./services/voucherApi.js";
 import { listAuditLogs } from "./services/auditApi.js";
@@ -103,8 +105,12 @@ export default function App() {
     };
   }, [suppliers, clients]);
 
-  function addLocalAudit(action, details) {
-    setAuditLog((current) => [{ id: createRecordId("activity"), action, details, createdAt: new Date().toISOString() }, ...current].slice(0, 100));
+  function addLocalAudit(action, details, entityType = null, entityId = null) {
+    setAuditLog((current) => [{
+      id: createRecordId("activity"), action, details, entityType, entityId,
+      actorUsername: user?.username, actorFullName: user?.fullName,
+      createdAt: new Date().toISOString()
+    }, ...current].slice(0, 100));
   }
 
   function handleLogin(authenticatedUser) {
@@ -160,7 +166,9 @@ export default function App() {
   }
 
   async function removeSupplier(supplierId, reason) {
-    if (USE_DEMO_DATA) setSuppliers((current) => current.map((item) => item.id === supplierId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason } : item));
+    if (USE_DEMO_DATA) setSuppliers((current) => user?.role === "admin"
+      ? current.filter((item) => item.id !== supplierId)
+      : current.map((item) => item.id === supplierId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason, restoreAllowed: true } : item));
     else { await deleteSupplier(supplierId, reason); await refreshBackendData(); }
     setAppMessage("Supplier moved to deleted records.");
   }
@@ -172,7 +180,9 @@ export default function App() {
   }
 
   async function removeSupplierTransaction(transactionId, reason) {
-    if (USE_DEMO_DATA) setSuppliers((current) => current.map((supplier) => ({ ...supplier, transactions: supplier.transactions.map((item) => item.id === transactionId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason } : item) })));
+    if (USE_DEMO_DATA) setSuppliers((current) => current.map((supplier) => ({ ...supplier, transactions: user?.role === "admin"
+      ? supplier.transactions.filter((item) => item.id !== transactionId)
+      : supplier.transactions.map((item) => item.id === transactionId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason, restoreAllowed: true } : item) })));
     else { await deleteSupplierTransaction(transactionId, reason); await refreshBackendData(); }
     setAppMessage("Transaction moved to deleted records.");
   }
@@ -217,7 +227,9 @@ export default function App() {
   }
 
   async function removeClient(clientId, reason) {
-    if (USE_DEMO_DATA) setClients((current) => current.map((item) => item.id === clientId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason } : item));
+    if (USE_DEMO_DATA) setClients((current) => user?.role === "admin"
+      ? current.filter((item) => item.id !== clientId)
+      : current.map((item) => item.id === clientId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason, restoreAllowed: true } : item));
     else { await deleteClient(clientId, reason); await refreshBackendData(); }
     setAppMessage("Client moved to deleted records.");
   }
@@ -229,7 +241,9 @@ export default function App() {
   }
 
   async function removeClientTransaction(transactionId, reason) {
-    if (USE_DEMO_DATA) setClients((current) => current.map((client) => ({ ...client, transactions: client.transactions.map((item) => item.id === transactionId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason } : item) })));
+    if (USE_DEMO_DATA) setClients((current) => current.map((client) => ({ ...client, transactions: user?.role === "admin"
+      ? client.transactions.filter((item) => item.id !== transactionId)
+      : client.transactions.map((item) => item.id === transactionId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason, restoreAllowed: true } : item) })));
     else { await deleteClientTransaction(transactionId, reason); await refreshBackendData(); }
     setAppMessage("Client transaction moved to deleted records.");
   }
@@ -242,10 +256,15 @@ export default function App() {
 
   async function receiveClientPayment(transactionId, values) {
     if (USE_DEMO_DATA) {
+      const selectedTransaction = clients.flatMap((client) => client.transactions)
+        .find((transaction) => transaction.id === transactionId);
+      if (!selectedTransaction || Number(values.amount) !== Number(selectedTransaction.balance)) {
+        throw new Error("Partial payments are not allowed. Payment must equal the full remaining balance.");
+      }
       setClients((current) => current.map((client) => {
         const transactions = client.transactions.map((transaction) => {
           if (transaction.id !== transactionId) return transaction;
-          const balance = Math.max(Number(transaction.balance) - Number(values.amount), 0);
+          const balance = 0;
           return { ...transaction, ...values, balance, billingStatus: calculateBillingStatus(transaction.amount, balance) };
         });
         return { ...client, transactions, billingStatus: calculateCompanyStatus(transactions) };
@@ -285,22 +304,47 @@ export default function App() {
     setAppMessage("Voucher details updated and linked records recalculated.");
   }
 
-  async function cancelVoucher(voucherId, reason) {
-    if (USE_DEMO_DATA) setVouchers((current) => current.map((item) => item.id === voucherId ? { ...item, status: "Cancelled" } : item));
-    else { await cancelVoucherRequest(voucherId, reason); await refreshBackendData(); }
-    setAppMessage("Voucher cancelled and its payment reversed.");
-  }
-
   async function removeVoucher(voucherId, reason) {
-    if (USE_DEMO_DATA) setVouchers((current) => current.map((item) => item.id === voucherId ? { ...item, deletedAt: new Date().toISOString(), deletionReason: reason } : item));
+    if (USE_DEMO_DATA) {
+      const deletedAt = new Date().toISOString();
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      setVouchers((current) => current.map((item) => item.id === voucherId ? {
+        ...item, previousStatus: item.status, status: "Deleted",
+        deletedAt, deletionReason: reason, restoreAllowed: true
+      } : item));
+      addLocalAudit("VOUCHER_DELETED", {
+        voucherNumber: voucher?.voucherNumber,
+        previousStatus: voucher?.status,
+        status: "Deleted",
+        deletionMode: "restorable",
+        reason
+      }, "voucher", voucherId);
+    }
     else { await deleteVoucherRequest(voucherId, reason); await refreshBackendData(); }
-    setAppMessage("Voucher moved to deleted records.");
+    setAppMessage("Voucher marked Deleted and kept in Voucher Cheque records.");
   }
 
   async function recoverVoucher(voucherId) {
-    if (USE_DEMO_DATA) setVouchers((current) => current.map((item) => item.id === voucherId ? { ...item, deletedAt: null, deletionReason: null } : item));
+    if (USE_DEMO_DATA) setVouchers((current) => current.map((item) => item.id === voucherId ? {
+      ...item, status: "Draft", deletedAt: null, deletionReason: null, restoreAllowed: true
+    } : item));
     else { await restoreVoucherRequest(voucherId); await refreshBackendData(); }
-    setAppMessage("Voucher restored.");
+    setAppMessage("Voucher restored as Draft. No payment was reapplied.");
+  }
+
+  async function permanentlyRemoveVoucher(voucherId) {
+    if (USE_DEMO_DATA) {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      setVouchers((current) => current.filter((item) => item.id !== voucherId));
+      addLocalAudit("VOUCHER_PERMANENTLY_DELETED", {
+        voucherNumber: voucher?.voucherNumber,
+        deletionMode: "unrestorable"
+      }, "voucher", voucherId);
+    } else {
+      await permanentlyDeleteVoucherRequest(voucherId);
+      await refreshBackendData();
+    }
+    setAppMessage("Voucher is permanently unrestorable. Audit history was kept.");
   }
 
   if (authLoading) return <div className="auth-loading" role="status">Loading Illuminux system…</div>;
@@ -314,15 +358,17 @@ export default function App() {
   } else if (currentPage === "clients") {
     page = <ClientsPage clients={clients} user={user} onBack={() => setCurrentPage("dashboard")} onSelectClient={(item) => { setSelectedClientId(item.id); setCurrentPage("client-details"); }} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} activeTab={clientSectionTab} onTabChange={setClientSectionTab} />;
   } else if (currentPage === "vouchers") {
-    page = <VouchersPage user={user} suppliers={suppliers.filter((item) => !item.deletedAt)} vouchers={vouchers} auditLog={auditLog} onBack={() => setCurrentPage("dashboard")} onCreate={createVoucher} onEdit={editVoucher} onIssue={issueVoucher} onCancel={cancelVoucher} onDelete={removeVoucher} onRestore={recoverVoucher} />;
+    page = <VouchersPage user={user} suppliers={suppliers.filter((item) => !item.deletedAt)} vouchers={vouchers} auditLog={auditLog} onBack={() => setCurrentPage("dashboard")} onCreate={createVoucher} onEdit={editVoucher} onIssue={issueVoucher} onDelete={removeVoucher} onRestore={recoverVoucher} onPermanentDelete={permanentlyRemoveVoucher} />;
   } else if (currentPage === "total-sales") {
     page = <TotalSalesPage clients={clients} onBack={() => setCurrentPage("dashboard")} />;
+  } else if (currentPage === "total-purchases") {
+    page = <TotalPurchasesPage suppliers={suppliers} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} />;
   } else if (currentPage === "supplier-details" && selectedSupplier) {
     page = <SupplierDetailsPage supplier={selectedSupplier} user={user} onBack={() => setCurrentPage("suppliers")} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onRestoreTransaction={recoverSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} />;
   } else if (currentPage === "client-details" && selectedClient) {
     page = <ClientDetailsPage client={selectedClient} user={user} onBack={() => setCurrentPage("clients")} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onRestoreTransaction={recoverClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} />;
   } else {
-    page = <DashboardPage user={user} onLogout={handleLogout} recordSummary={recordSummary} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenAdmin={() => setCurrentPage("admin-users")} />;
+    page = <DashboardPage user={user} onLogout={handleLogout} recordSummary={recordSummary} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenAdmin={() => setCurrentPage("admin-users")} />;
   }
 
   return <>{dataLoading && <div className="app-data-loading" role="status">Refreshing records…</div>}{appMessage && <div className="dashboard-notice" role="status">{appMessage}</div>}{page}</>;

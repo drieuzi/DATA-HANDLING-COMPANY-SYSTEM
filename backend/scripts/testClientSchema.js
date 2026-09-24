@@ -34,25 +34,11 @@ async function runTest() {
     await client.query(
       `INSERT INTO client_payments (
          client_transaction_id, client_id, payment_date, amount, recorded_by
-       ) VALUES ($1, $2, CURRENT_DATE, 4000.00, $3)`,
-      [transaction.rows[0].id, clientRecord.rows[0].id, user.rows[0].id]
-    );
-    const partial = await client.query(
-      `UPDATE client_transactions SET balance = balance - 4000.00,
-         payment_date = CURRENT_DATE WHERE id = $1 RETURNING balance, billing_status`,
-      [transaction.rows[0].id]
-    );
-    assert.equal(partial.rows[0].balance, "6000.00");
-    assert.equal(partial.rows[0].billing_status, "Partially Paid");
-
-    await client.query(
-      `INSERT INTO client_payments (
-         client_transaction_id, client_id, payment_date, amount, recorded_by
-       ) VALUES ($1, $2, CURRENT_DATE, 6000.00, $3)`,
+       ) VALUES ($1, $2, CURRENT_DATE, 10000.00, $3)`,
       [transaction.rows[0].id, clientRecord.rows[0].id, user.rows[0].id]
     );
     const paid = await client.query(
-      `UPDATE client_transactions SET balance = balance - 6000.00,
+      `UPDATE client_transactions SET balance = balance - 10000.00,
          payment_date = CURRENT_DATE WHERE id = $1 RETURNING balance, billing_status`,
       [transaction.rows[0].id]
     );
@@ -63,7 +49,7 @@ async function runTest() {
     assert.equal(finalReceivable.rows[0].count, 0);
     await client.query("ROLLBACK");
     console.log("Client schema test passed; all temporary test data was rolled back.");
-    console.log("Verified: Receivables and Total Sales source, Not Paid -> Partially Paid -> Paid, and payment history.");
+    console.log("Verified: Receivables and Total Sales source, Not Paid -> Paid, and full-payment history.");
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

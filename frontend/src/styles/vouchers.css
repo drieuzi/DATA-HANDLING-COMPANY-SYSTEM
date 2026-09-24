@@ -22,6 +22,9 @@
 .activity-card ul { margin: 0; padding: 0; list-style: none; }
 .activity-card li { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; border-top: 1px solid var(--border); }
 .activity-card li div { display: grid; gap: 4px; }
+.activity-card .activity-meta { justify-items: end; }
+.activity-card .activity-actions { display: flex; grid-auto-flow: column; gap: 8px; margin-top: 6px; }
+.activity-card .activity-actions button { min-width: 78px; }
 .activity-card span,
 .activity-card time { color: var(--muted); font-size: .78rem; }
 

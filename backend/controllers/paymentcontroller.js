@@ -1,9 +1,10 @@
 const pool = require("../config/db");
 const { writeAudit } = require("../services/auditservice");
 const {
-  cancelVoucherPayment,
   createVoucherWithPayment,
+  deleteVoucherForHistory,
   issueVoucherPayment,
+  permanentlyDeleteVoucher: permanentlyDeleteVoucherRecord,
   updateVoucherDetails
 } = require("../services/voucherservice");
 const HttpError = require("../utils/httpError");
@@ -23,7 +24,9 @@ function mapVoucher(row) {
     bankName: row.bank_name || "",
     status: row.payment_status || "Draft", particulars: row.particulars || "",
     attachmentName: row.attachment_name || "", deletedAt: row.deleted_at,
-    deletionReason: row.deletion_reason, createdAt: row.created_at, updatedAt: row.updated_at
+    deletionReason: row.deletion_reason, restoreAllowed: row.restore_allowed !== false,
+    permanentlyDeletedAt: row.permanently_deleted_at,
+    createdAt: row.created_at, updatedAt: row.updated_at
   };
 }
 
@@ -33,8 +36,8 @@ async function listPayables(request, response, next) {
     const status = validate.text(request.query.status, "Status", { max: 20 });
     const from = validate.date(request.query.from, "From date");
     const to = validate.date(request.query.to, "To date");
-    if (status && !["Not Paid", "Partially Paid"].includes(status)) {
-      throw new HttpError(400, "Payable status must be Not Paid or Partially Paid.");
+    if (status && status !== "Not Paid") {
+      throw new HttpError(400, "Payable status must be Not Paid.");
     }
     const result = await pool.query(
       `SELECT * FROM payable_records
@@ -59,7 +62,7 @@ async function listVouchers(request, response, next) {
        FROM vouchers v
        JOIN suppliers s ON s.id = v.supplier_id
        JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
-       WHERE ($1::BOOLEAN OR v.deleted_at IS NULL)
+       WHERE v.deleted_at IS NULL OR ($1::BOOLEAN AND v.restore_allowed = TRUE)
        ORDER BY v.created_at DESC, v.id DESC`,
       [includeDeleted]
     );
@@ -92,7 +95,7 @@ async function getVoucher(request, response, next) {
        FROM vouchers v
        JOIN suppliers s ON s.id = v.supplier_id
        JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
-       WHERE v.id = $1 AND (v.deleted_at IS NULL OR $2 = 'admin')`,
+       WHERE v.id = $1 AND (v.deleted_at IS NULL OR ($2 = 'admin' AND v.restore_allowed = TRUE))`,
       [voucherId, request.user.role]
     );
     if (!result.rows[0]) throw new HttpError(404, "Voucher not found.");
@@ -161,44 +164,21 @@ async function updateVoucher(request, response, next) {
   } catch (error) { next(error); }
 }
 
-async function cancelVoucher(request, response, next) {
-  try {
-    const voucherId = validate.id(request.params.id, "Voucher ID");
-    const reason = validate.text(request.body.reason, "Cancellation reason", { required: true, max: 500 });
-    await cancelVoucherPayment(request, voucherId, reason);
-    response.json({ message: "Voucher cancelled. Any issued payment was reversed." });
-  } catch (error) { next(error); }
-}
-
 async function deleteVoucher(request, response, next) {
-  let client;
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
-    const statusResult = await pool.query(
-      "SELECT payment_status FROM vouchers WHERE id = $1 AND deleted_at IS NULL",
-      [voucherId]
-    );
-    if (!statusResult.rows[0]) throw new HttpError(404, "Voucher not found.");
-    if (statusResult.rows[0].payment_status === "Issued") {
-      await cancelVoucherPayment(request, voucherId, reason);
-    }
-    client = await pool.connect();
-    await client.query("BEGIN");
-    const result = await client.query(
-      `UPDATE vouchers SET deleted_at = NOW(), deleted_by = $1, deletion_reason = $2
-       WHERE id = $3 AND deleted_at IS NULL AND payment_status <> 'Issued'
-       RETURNING id, voucher_number, payment_status`,
-      [request.user.id, reason, voucherId]
-    );
-    if (!result.rows[0]) throw new HttpError(409, "Voucher not found, already deleted, or still Issued. Cancel it first.");
-    await writeAudit(client, request, "VOUCHER_DELETED", "voucher", voucherId, { reason, voucherNumber: result.rows[0].voucher_number, status: result.rows[0].payment_status });
-    await client.query("COMMIT");
-    response.json({ message: "Voucher moved to deleted records." });
-  } catch (error) {
-    if (client) await client.query("ROLLBACK").catch(() => {});
-    next(error);
-  } finally { if (client) client.release(); }
+    await deleteVoucherForHistory(request, voucherId, reason);
+    response.json({ message: "Voucher marked Deleted and kept in Voucher Cheque records." });
+  } catch (error) { next(error); }
+}
+
+async function permanentlyDeleteVoucher(request, response, next) {
+  try {
+    const voucherId = validate.id(request.params.id, "Voucher ID");
+    await permanentlyDeleteVoucherRecord(request, voucherId);
+    response.json({ message: "Voucher is now permanently unrestorable. Audit history was kept." });
+  } catch (error) { next(error); }
 }
 
 async function restoreVoucher(request, response, next) {
@@ -207,16 +187,26 @@ async function restoreVoucher(request, response, next) {
     const voucherId = validate.id(request.params.id, "Voucher ID");
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE vouchers v SET deleted_at = NULL, deleted_by = NULL, deletion_reason = NULL
+      `UPDATE vouchers v SET payment_status = 'Draft',
+         deleted_at = NULL, deleted_by = NULL,
+         deletion_reason = NULL, restore_allowed = TRUE,
+         issued_by = NULL, issued_at = NULL, cancelled_at = NULL,
+         permanently_deleted_by = NULL, permanently_deleted_at = NULL
        FROM supplier_transactions st, suppliers s
-       WHERE v.id = $1 AND v.deleted_at IS NOT NULL
+       WHERE v.id = $1 AND v.payment_status = 'Deleted'
+         AND v.deleted_at IS NOT NULL AND v.restore_allowed = TRUE
          AND v.supplier_transaction_id = st.id AND st.deleted_at IS NULL
          AND v.supplier_id = s.id AND s.deleted_at IS NULL
-       RETURNING v.id`,
+       RETURNING v.id, v.voucher_number`,
       [voucherId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted voucher or its active transaction was not found.");
-    await writeAudit(client, request, "VOUCHER_RESTORED", "voucher", voucherId);
+    await writeAudit(client, request, "VOUCHER_RESTORED", "voucher", voucherId, {
+      voucherNumber: result.rows[0].voucher_number,
+      restoredAs: "Draft",
+      restoredBy: request.user.fullName || request.user.username,
+      actionPerformed: "Deleted voucher restored as Draft without reapplying payment"
+    });
     await client.query("COMMIT");
     response.json({ message: "Voucher restored." });
   } catch (error) {
@@ -245,7 +235,7 @@ async function paymentHistory(request, response, next) {
 }
 
 module.exports = {
-  cancelVoucher, createVoucher, deleteVoucher, getVoucher, issueVoucher,
+  createVoucher, deleteVoucher, getVoucher, issueVoucher,
   listPayables, listVouchers, paymentHistory, previewNextVoucherNumber,
-  restoreVoucher, updateVoucher
+  permanentlyDeleteVoucher, restoreVoucher, updateVoucher
 };

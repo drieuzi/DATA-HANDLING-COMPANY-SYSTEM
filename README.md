@@ -82,12 +82,14 @@ The Admin can create either an `Admin` or `User`, change roles, activate/deactiv
 - create and issue voucher cheques;
 - edit voucher-cheque details, including issued voucher payments;
 - delete vouchers after confirming the action;
-- record partial or full client payments;
+- record full-balance client payments;
 - view records and dashboard analytics.
 
-Admins provide oversight. They can add and delete records, restore deleted records, add voucher cheques, cancel/delete/restore vouchers, manage employee accounts, and view audit activity. Editing existing supplier/client details and financial transactions is reserved for a `User` employee account and is enforced by the backend.
+Admins have full data control. They can add and edit supplier/client details, transactions, and vouchers; move Draft or Issued vouchers to historical Deleted status; restore those vouchers as Draft; make a deleted voucher permanently unrestorable; manage employee accounts; and view audit activity.
 
-Deletes are recoverable soft deletes. Deleting an issued voucher automatically reverses its payment before deletion. Cancelling an issued voucher restores the supplier transaction balance. Cancelled vouchers remain included in the **Total Vouchers** count but their reversed payments are excluded from expense totals.
+Admin accounts do not have a Cancel action or cancellation permission. The dedicated Admin cancellation endpoint was removed, and the Admin voucher editor cannot change an active voucher to `Cancelled`.
+
+For supplier, client, and transaction records, an employee deletion is recoverable by an Admin while an Admin deletion is permanently hidden with audit history retained. Vouchers use two separate Admin actions: deleting a Draft or Issued voucher keeps it visible with `Deleted` status and makes it restorable; the Delete button beside Restore in Recent Audit Activity makes that voucher permanently unrestorable. Deleting an Issued voucher reverses its payment first. Restoring returns it as Draft without automatically reapplying payment.
 
 The React interface hides controls that a role cannot use, and the Express authorization middleware enforces the same permissions even if someone calls the API directly.
 
@@ -99,12 +101,12 @@ Supplier and client forms collect only the company name, contact person, and con
 - `payable_records` is a PostgreSQL view containing active transactions with a balance greater than zero.
 - `client_transactions` is the single source for Receivables and Total Sales.
 - `receivable_records` is a PostgreSQL view containing active client transactions with a balance greater than zero.
-- `client_payments` preserves every partial/full client payment and automatically reduces the transaction balance.
+- `client_payments` preserves each completed client payment and automatically settles the transaction balance.
 - Money uses `NUMERIC(14,2)`.
-- Billing status is generated from amount and balance: `Not Paid`, `Partially Paid`, or `Paid`.
+- Billing status is generated from amount and balance: `Not Paid` or `Paid`.
 - A voucher links to a transaction by database ID and has a unique voucher number.
 - Issuing a voucher and inserting its payment happen in one PostgreSQL transaction.
-- Overpayments, zero/negative payments, duplicate voucher numbers, and invalid relationships are rejected.
+- Partial, excessive, zero/negative payments, duplicate voucher numbers, and invalid relationships are rejected.
 - Payment rows are preserved as history. Cancellation marks the payment reversed instead of overwriting it.
 - Important authentication, account, supplier, transaction, voucher, and payment actions are recorded in `audit_logs`.
 
@@ -115,11 +117,9 @@ Supplier and client forms collect only the company name, contact person, and con
 3. Add a supplier and open it.
 4. Add a transaction with amount `10000` and a P.O. and S.I. number.
 5. Open the **Payables** tab. It shows `Not Paid` and ₱10,000 balance.
-6. Open **Voucher Cheque**, create voucher `VC-0001`, enter amount `4000`, and choose `Issued`.
-7. Return to Payables. Balance is ₱6,000 and status is `Partially Paid`.
-8. Create voucher `VC-0002` for `6000` and issue it.
-9. The transaction becomes `Paid` with zero balance and disappears from unpaid Payables.
-10. Supplier records, voucher history, dashboard totals, monthly analytics, and Admin audit activity reflect the changes.
+6. Open **Voucher Cheque**, create the automatically numbered voucher for the full `10000`, and choose `Issued`.
+7. The transaction becomes `Paid` with zero balance and disappears from unpaid Payables.
+8. Supplier records, voucher history, dashboard totals, monthly analytics, and Admin audit activity reflect the changes.
 
 Also verify that the UI/API reject an overpayment, zero/negative payment, duplicate voucher number, missing/expired login, and nonexistent transaction. Log in as a normal User to confirm Admin-only controls and endpoints are unavailable.
 

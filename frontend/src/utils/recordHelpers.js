@@ -8,16 +8,12 @@ export function calculateBillingStatus(amount, balance) {
   const safeBalance = Math.min(Math.max(Number(balance) || 0, 0), safeAmount);
 
   if (safeBalance === 0) return "Paid";
-  if (safeBalance < safeAmount) return "Partially Paid";
   return "Not Paid";
 }
 
 export function calculateCompanyStatus(transactions) {
   if (!transactions.length) return "Not Paid";
   if (transactions.every((transaction) => transaction.billingStatus === "Paid")) return "Paid";
-  if (transactions.some((transaction) => transaction.billingStatus !== "Not Paid")) {
-    return "Partially Paid";
-  }
   return "Not Paid";
 }
 

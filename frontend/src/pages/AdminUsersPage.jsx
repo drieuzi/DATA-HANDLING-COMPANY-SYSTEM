@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header.jsx";
+import PageBackButton from "../components/PageBackButton.jsx";
 import {
   createUser,
   listUsers,
@@ -160,10 +161,8 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
       <Header user={currentUser} onLogout={onLogout} />
 
       <main className="admin-users-shell">
+        <PageBackButton label="Back to Dashboard" onClick={onBack} />
         <div className="admin-titlebar">
-          <button className="record-back-button" type="button" onClick={onBack} aria-label="Back to dashboard">
-            <span aria-hidden="true">◀</span>
-          </button>
           <div>
             <p>Administrator Access</p>
             <h1>Account Management</h1>

@@ -81,7 +81,7 @@ export default function TransactionEditorDialog({
         id: transaction?.id,
         purchaseOrder: fields.purchaseOrder.trim(),
         salesInvoice: fields.salesInvoice.trim(),
-        collectionReceipt: fields.collectionReceipt.trim() || (isSupplier ? "" : "—"),
+        collectionReceipt: fields.collectionReceipt?.trim() || (isSupplier ? "" : "—"),
         paymentDate: fields.paymentDate || (isSupplier ? "" : "—"),
         amount,
         balance,
@@ -115,10 +115,12 @@ export default function TransactionEditorDialog({
             <input name="salesInvoice" value={fields.salesInvoice} onChange={updateField} required />
           </label>
 
-          <label>
-            C.R. Number
-            <input name="collectionReceipt" value={fields.collectionReceipt} onChange={updateField} />
-          </label>
+          {isSupplier && (
+            <label>
+              C.R. Number
+              <input name="collectionReceipt" value={fields.collectionReceipt} onChange={updateField} />
+            </label>
+          )}
 
           {!isSupplier && (
             <label>

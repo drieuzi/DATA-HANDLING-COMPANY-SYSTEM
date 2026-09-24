@@ -8,7 +8,7 @@
 | Supplier transaction | Belongs to one supplier and stores original amount plus remaining balance |
 | Payable | A live view of a supplier transaction whose balance is greater than zero |
 | Voucher | Links to one supplier transaction by database ID and has a unique voucher number |
-| Payment | Created when a voucher is issued; preserved for partial-payment history |
+| Payment | Created when a full-balance voucher is issued and preserved as history |
 | Audit log | Identifies the acting user, action, record, details, IP address, and timestamp |
 
 ## Voucher state rules
@@ -18,11 +18,12 @@
 | Draft | None | Yes | Yes |
 | Issued | Reduces the linked transaction balance | Yes; payment reverses automatically | Yes |
 | Cancelled | Reverses any issued payment and restores balance | Yes | Yes until deleted |
-| Deleted | No additional financial effect | Can be restored | No |
+| Deleted | Issued payment is reversed; voucher stays visible historically | Admin can restore it as Draft | No |
+| Permanently unrestorable | No additional financial effect; audit remains | No | No |
 
 Issuing and applying payment run inside one PostgreSQL transaction. If payment insertion, balance update, or audit insertion fails, the operation rolls back.
 
-Editing an issued voucher recalculates its active payment and linked supplier-transaction balance in one PostgreSQL transaction. Cancelling or deleting an issued voucher restores the payable balance, and the new status is returned in the linked supplier track record.
+Editing an issued voucher recalculates its active payment and linked supplier-transaction balance in one PostgreSQL transaction. Deleting an issued voucher reverses its payment and marks the voucher Deleted atomically. Restore returns it as Draft without applying payment. The irreversible Delete beside Restore only disables restoration and records a second audit event.
 
 ## Permissions
 
@@ -30,21 +31,22 @@ Editing an issued voucher recalculates its active payment and linked supplier-tr
 | --- | --- | --- |
 | View records and dashboard | Yes | Yes |
 | Add supplier/client transactions | Yes | Yes |
-| Edit financial transaction details | No | Yes |
+| Edit financial transaction details | Yes | Yes |
 | Delete supplier/client transactions | Yes | Yes |
 | Add supplier/client names | Yes | Yes |
-| Edit supplier/client names | No | Yes |
+| Edit supplier/client names | Yes | Yes |
 | Delete supplier/client names | Yes | Yes |
 | Create and issue voucher cheques | Yes | Yes |
-| Edit voucher details | No | Yes |
+| Edit voucher details | Yes | Yes |
 | Delete vouchers after confirmation | Yes | Yes |
 | Record client payments | Yes | Yes |
 | Restore deleted transactions or names | Yes | No |
-| Cancel/restore vouchers | Yes | No |
+| Change voucher status to Cancelled | No | Yes through Edit |
+| Restore deleted vouchers | Yes | No |
 | Manage accounts | Yes | No |
 | View audit logs | Yes | No |
 
-`User` means an employee account. In Supplier Names and Records and Client Names and Records, employees can add, edit, and delete company names and their transactions. Admins can add and delete records, restore deleted records, cancel vouchers, manage accounts, and inspect audit logs. Editing existing supplier/client data and transaction details is intentionally assigned to employee Users.
+`User` means an employee account. Both roles can add and edit company names, transactions, and vouchers. Voucher deletion remains historical and restorable until an Admin uses the separate irreversible Delete beside Restore in Recent Audit Activity. Other record types keep their existing role-aware deletion rules.
 
 Every protected API route checks the JWT and role on the server. Hiding a React button is only a usability measure, not the security control.
 
@@ -60,7 +62,7 @@ npm run db:test-supplier
 npm run dev
 ```
 
-`db:test-supplier` runs in a rollback-only database transaction. It verifies ₱10,000 → ₱6,000 → ₱0, status changes, Payables removal, overpayment rejection, duplicate voucher rejection, payment history, and cancellation reversal without leaving test records behind.
+`db:test-supplier` runs in a rollback-only database transaction. It verifies ₱10,000 → ₱0 through one full payment, Payables removal, overpayment rejection, duplicate voucher rejection, payment history, and cancellation reversal without leaving test records behind.
 
 See `README.md` for environment settings, account creation, UI testing, and API routes.
 

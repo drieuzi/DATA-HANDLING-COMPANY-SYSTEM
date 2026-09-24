@@ -10,7 +10,7 @@
 
 .admin-titlebar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 18px;
   padding: 18px 22px;
@@ -40,17 +40,6 @@
 
 .admin-titlebar h1 {
   font-size: clamp(1.65rem, 4vw, 2.5rem);
-}
-
-.record-back-button {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 2px solid var(--black);
-  border-radius: 50%;
-  background: var(--yellow);
-  cursor: pointer;
 }
 
 .admin-add-button,
@@ -344,7 +333,7 @@
 
 @media (max-width: 680px) {
   .admin-users-shell { width: min(100% - 20px, 1280px); padding-top: 14px; }
-  .admin-titlebar { grid-template-columns: auto 1fr; padding: 14px; }
+  .admin-titlebar { grid-template-columns: 1fr; padding: 14px; }
   .admin-add-button { grid-column: 1 / -1; width: 100%; }
   .account-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .account-filters { flex-direction: column; }

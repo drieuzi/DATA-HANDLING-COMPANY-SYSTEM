@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header.jsx";
 import DashboardCard from "../components/DashboardCard.jsx";
 import ExpensesChart from "../components/ExpensesChart.jsx";
-import PurchaseDialog from "../components/PurchaseDialog.jsx";
 import { demoDashboardData } from "../data/demoDashboardData.js";
 import { getDashboardData } from "../services/dashboardApi.js";
 import {
@@ -28,6 +27,7 @@ export default function DashboardPage({
   onOpenSuppliers,
   onOpenVouchers,
   onOpenSales,
+  onOpenPurchases,
   onOpenAdmin,
   recordSummary,
   voucherCount
@@ -37,7 +37,6 @@ export default function DashboardPage({
   );
   const [dataSource, setDataSource] = useState("loading");
   const [notice, setNotice] = useState("");
-  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -140,7 +139,7 @@ export default function DashboardPage({
             className="summary-card"
             label="Total Purchase"
             value={formatCurrency(recordSummary?.totalPurchases ?? purchaseTotals.payablePurchases)}
-            onClick={() => setPurchaseDialogOpen(true)}
+            onClick={onOpenPurchases}
           />
         </section>
 
@@ -154,11 +153,6 @@ export default function DashboardPage({
 
       {notice && <div className="dashboard-notice" role="status">{notice}</div>}
 
-      <PurchaseDialog
-        isOpen={purchaseDialogOpen}
-        totals={purchaseTotals}
-        onClose={() => setPurchaseDialogOpen(false)}
-      />
     </div>
   );
 }

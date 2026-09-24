@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
+import PageBackButton from "../components/PageBackButton.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
 function getMonthKey(date) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date.slice(0, 7) : "";
+  const match = String(date || "").match(/^(\d{4}-\d{2})-\d{2}/);
+  return match?.[1] || "";
 }
 
 function formatMonth(monthKey) {
@@ -39,13 +41,19 @@ export default function TotalSalesPage({ clients, onBack }) {
   const [selectedMonth, setSelectedMonth] = useState(() => availableMonths[0] || "");
   const [query, setQuery] = useState("");
 
+  useEffect(() => {
+    if (availableMonths.length && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[0]);
+    }
+  }, [availableMonths, selectedMonth]);
+
   const monthlyRows = useMemo(
     () => transactions.filter((transaction) => transaction.monthKey === selectedMonth),
     [transactions, selectedMonth]
   );
 
   const rows = useMemo(() => monthlyRows.filter((transaction) => {
-    const searchText = `${transaction.companyName} ${transaction.purchaseOrder} ${transaction.salesInvoice}`.toLowerCase();
+    const searchText = `${transaction.companyName} ${transaction.purchaseOrder} ${transaction.voucherNumber || ""} ${transaction.date || ""}`.toLowerCase();
     return searchText.includes(query.toLowerCase());
   }), [monthlyRows, query]);
 
@@ -55,16 +63,19 @@ export default function TotalSalesPage({ clients, onBack }) {
     <div className="app-page total-sales-page">
       <TrackRecordHeader
         title="Total Sales of the Company"
-        backLabel="Back to dashboard"
-        onBack={onBack}
         variant="light"
       />
 
-      <main className="total-sales-main">
-        <section className="sales-report-card" aria-labelledby="salesMonthTitle">
-          <div className="sales-report-toolbar">
+      <main className="financial-records-main total-sales-main">
+        <PageBackButton label="Back to Dashboard" onClick={onBack} />
+        <section className="financial-records-card sales-report-card" aria-labelledby="salesMonthTitle">
+          <div className="financial-records-heading">
+            <div><p>Client transaction records</p><h2 id="salesMonthTitle">Monthly Sales</h2></div>
+            <span>{rows.length} record(s)</span>
+          </div>
+          <div className="records-toolbar sales-report-toolbar">
             <label>
-              Report Month
+              <span>Report Month</span>
               <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
                 {availableMonths.length ? availableMonths.map((month) => (
                   <option key={month} value={month}>{formatMonth(month)}</option>
@@ -73,26 +84,28 @@ export default function TotalSalesPage({ clients, onBack }) {
             </label>
 
             <label>
-              Search Records
+              <span>Search Records</span>
               <input
                 type="search"
-                placeholder="Company, P.O., or S.I. number"
+                placeholder="Company, P.O., or voucher number"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
           </div>
 
-          <h2 className="sales-month-title" id="salesMonthTitle">
+          <div className="sales-month-title">
             Month of {formatMonth(selectedMonth)}
-          </h2>
+          </div>
 
-          <div className="sales-table-wrapper">
-            <table className="sales-report-table">
+          <div className="financial-table-wrapper sales-table-wrapper">
+            <table className="financial-record-table sales-report-table">
               <thead>
                 <tr>
                   <th>Company Name</th>
+                  <th>Voucher #</th>
                   <th>P.O. #</th>
+                  <th>Transaction Date</th>
                   <th>Exact Payment Date</th>
                   <th>Amount</th>
                 </tr>
@@ -101,19 +114,21 @@ export default function TotalSalesPage({ clients, onBack }) {
                 {rows.length ? rows.map((transaction) => (
                   <tr key={`${transaction.companyId}-${transaction.id}`}>
                     <td>{transaction.companyName}</td>
+                    <td>{transaction.voucherNumber || "—"}</td>
                     <td>{transaction.purchaseOrder}</td>
+                    <td>{formatRecordDate(transaction.date)}</td>
                     <td>{formatPaymentDate(transaction.paymentDate)}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td className="sales-empty" colSpan="4">No sales records found for this month.</td>
+                    <td className="sales-empty" colSpan="6">No sales records found for this month.</td>
                   </tr>
                 )}
               </tbody>
               <tfoot>
                 <tr>
-                  <th colSpan="3">Monthly Total</th>
+                  <th colSpan="5">Monthly Total</th>
                   <td>{formatCurrency(monthlyTotal)}</td>
                 </tr>
               </tfoot>

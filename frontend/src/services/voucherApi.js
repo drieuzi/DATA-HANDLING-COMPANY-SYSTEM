@@ -31,12 +31,12 @@ export function issueVoucher(id) {
   return apiRequest(`/vouchers/${id}/issue`, { method: "POST" });
 }
 
-export function cancelVoucher(id, reason) {
-  return apiRequest(`/vouchers/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) });
-}
-
 export function deleteVoucher(id, reason) {
   return apiRequest(`/vouchers/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) });
+}
+
+export function permanentlyDeleteVoucher(id) {
+  return apiRequest(`/vouchers/${id}/permanent`, { method: "DELETE" });
 }
 
 export function restoreVoucher(id) {

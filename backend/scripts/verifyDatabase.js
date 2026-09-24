@@ -36,7 +36,7 @@ async function verifyDatabase() {
   );
 
   const generatedStatusResult = await pool.query(
-    `SELECT table_name, is_generated
+    `SELECT table_name, is_generated, generation_expression
      FROM information_schema.columns
      WHERE table_schema = 'public'
        AND table_name IN ('supplier_transactions', 'client_transactions')
@@ -50,8 +50,24 @@ async function verifyDatabase() {
        AND column_name IN ('withholding_tax_rate', 'withholding_tax_amount', 'net_cheque_amount', 'bank_name')`
   );
 
+  const voucherDeletionResult = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'vouchers'
+       AND column_name IN ('restore_allowed', 'permanently_deleted_by', 'permanently_deleted_at')`
+  );
+
   const voucherCounterResult = await pool.query(
     `SELECT current_value FROM system_counters WHERE counter_name = 'voucher_number'`
+  );
+
+  const deletionPolicyResult = await pool.query(
+    `SELECT table_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = ANY($1::TEXT[])
+       AND column_name = 'restore_allowed'`,
+    [["suppliers", "supplier_transactions", "clients", "client_transactions", "vouchers"]]
   );
 
   if (missingTables.length > 0) {
@@ -62,21 +78,31 @@ async function verifyDatabase() {
     throw new Error("Missing required Payables or Receivables view");
   }
   if (generatedStatusResult.rows.length !== 2
-    || generatedStatusResult.rows.some((row) => row.is_generated !== "ALWAYS")) {
+    || generatedStatusResult.rows.some((row) => row.is_generated !== "ALWAYS"
+      || row.generation_expression.includes("Partially Paid"))) {
     throw new Error("Supplier or client billing_status is not generated automatically");
   }
   if (voucherAccountingResult.rows.length !== 4) {
     throw new Error("Voucher withholding-tax or bank fields are missing");
   }
+  if (voucherDeletionResult.rows.length !== 3) {
+    throw new Error("Voucher historical or permanent-deletion fields are missing");
+  }
   if (!voucherCounterResult.rows[0]) {
     throw new Error("Voucher number series is not initialized");
+  }
+  if (deletionPolicyResult.rows.length !== 5) {
+    throw new Error("Role-aware deletion policy fields are missing");
   }
 
   console.log("Database verification passed.");
   console.log(`Tables: ${foundTables.join(", ")}`);
   console.log("Views: payable_records, receivable_records");
   console.log("Generated fields: supplier_transactions.billing_status, client_transactions.billing_status");
+  console.log("Billing states: Not Paid or Paid; partial payments are blocked");
+  console.log("Deletion policy: User deletions are restorable; Admin deletions remain audit-only");
   console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
+  console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
   console.log(`Next voucher number: ${String(Number(voucherCounterResult.rows[0].current_value) + 1).padStart(6, "0")}`);
 }
 

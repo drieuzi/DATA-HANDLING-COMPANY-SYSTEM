@@ -15,7 +15,6 @@ async function dashboard(request, response, next) {
         `SELECT
            COALESCE(SUM(amount) FILTER (WHERE billing_status = 'Paid'), 0) AS total_purchases,
            COALESCE(SUM(balance), 0) AS total_unpaid_payables,
-           COUNT(*) FILTER (WHERE billing_status = 'Partially Paid')::INTEGER AS partially_paid_count,
            COUNT(*) FILTER (WHERE billing_status = 'Paid')::INTEGER AS paid_count,
            COUNT(*) FILTER (WHERE billing_status = 'Not Paid')::INTEGER AS not_paid_count
          FROM supplier_transactions WHERE deleted_at IS NULL`
@@ -58,7 +57,6 @@ async function dashboard(request, response, next) {
       receivables: Number(salesTotals.total_receivables),
       totalPurchases: Number(totals.total_purchases),
       payables: Number(totals.total_unpaid_payables),
-      partiallyPaidTransactions: totals.partially_paid_count,
       paidTransactions: totals.paid_count,
       notPaidTransactions: totals.not_paid_count,
       currentMonthExpenses: Number(paymentTotals.rows[0].current_month_expenses),

@@ -4,7 +4,7 @@ const {
   getClient, listClients, listReceivables, paymentHistory, restoreClient,
   restoreTransaction, updateClient, updateTransaction
 } = require("../controllers/clientcontroller");
-const { requireAdmin, requireAuth, requireUser } = require("../middleware/authmiddleware");
+const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -15,12 +15,12 @@ router.get("/transactions/:id/payments", paymentHistory);
 router.get("/:id", getClient);
 
 router.post("/", createClient);
-router.patch("/:id", requireUser, updateClient);
+router.patch("/:id", requireStaff, updateClient);
 router.delete("/:id", deleteClient);
 router.patch("/:id/restore", requireAdmin, restoreClient);
 
 router.post("/transactions", createTransaction);
-router.patch("/transactions/:id", requireUser, updateTransaction);
+router.patch("/transactions/:id", requireStaff, updateTransaction);
 router.delete("/transactions/:id", deleteTransaction);
 router.patch("/transactions/:id/restore", requireAdmin, restoreTransaction);
 router.post("/transactions/:id/payments", addPayment);

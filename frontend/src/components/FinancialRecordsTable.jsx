@@ -19,7 +19,7 @@ export default function FinancialRecordsTable({
           <div className="financial-records-heading"><div><p>Company records</p><h2>{sectionTitle} Transactions</h2></div><span>{filteredRows.length} record(s)</span></div>
           <div className="records-toolbar">
             <input type="search" placeholder="Search company, P.O., S.I., voucher…" value={query} onChange={(event) => setQuery(event.target.value)} />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Partially Paid</option><option>Not Paid</option></select>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Not Paid</option></select>
           </div>
           <div className="financial-table-wrapper">
             <table className="financial-record-table"><thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}{(onEdit || onDelete || renderActions) && <th>Actions</th>}</tr></thead>
