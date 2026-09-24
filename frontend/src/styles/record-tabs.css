@@ -39,8 +39,95 @@
 }
 
 .record-list-card {
-  width: min(760px, 100%);
+  width: 100%;
   margin: 0 auto;
+}
+
+.company-list-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(170px, 230px);
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--white);
+}
+
+.company-list-filters label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.company-list-filters input,
+.company-list-filters select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.company-list-filters input:hover,
+.company-list-filters select:hover {
+  border-color: var(--orange-deep);
+}
+
+.company-list-table-wrapper {
+  overflow-x: auto;
+}
+
+.company-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+}
+
+.company-list-table th,
+.company-list-table td {
+  width: 50%;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.company-list-table th {
+  background: var(--peach-strong);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.company-list-table th:nth-child(2) {
+  text-align: center;
+}
+
+.company-list-table tbody tr {
+  transition: background 160ms ease;
+}
+
+.company-list-table tbody tr:hover {
+  background: var(--orange-wash);
+}
+
+.company-list-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.company-list-empty {
+  padding: 30px !important;
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center !important;
 }
 
 @media (max-width: 560px) {
@@ -61,5 +148,15 @@
     padding: 8px;
     border-radius: 13px;
     font-size: 0.72rem;
+  }
+
+  .company-list-filters {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .company-list-table th,
+  .company-list-table td {
+    padding: 13px 12px;
   }
 }

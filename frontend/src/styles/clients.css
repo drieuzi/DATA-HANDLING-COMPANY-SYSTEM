@@ -1,5 +1,5 @@
 .client-page {
-  background: var(--yellow);
+  background: var(--white);
 }
 
 .client-list-main {
@@ -9,9 +9,10 @@
 }
 
 .client-list-card {
-  padding: 31px clamp(24px, 8vw, 70px);
-  border-radius: 28px;
-  background: var(--peach-strong);
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--white);
   border: 2px solid var(--border);
   box-shadow: 0 12px 35px var(--shadow-color);
 }
@@ -48,42 +49,40 @@
 }
 
 .client-name-button {
-  justify-self: center;
-  padding: 5px 13px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  font-size: 0.92rem;
   font-weight: 900;
   text-decoration: underline;
-  text-transform: uppercase;
+  text-align: left;
   cursor: pointer;
 }
 
 .client-name-button:hover {
-  background: var(--yellow);
+  background: var(--orange-wash);
+  color: var(--orange-deep);
 }
 
 .client-status {
   justify-self: center;
   padding: 6px 12px;
   border-radius: 999px;
-  font-size: clamp(0.9rem, 2vw, 1.18rem);
+  font-size: 0.75rem;
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
 }
 
 .client-status--paid {
+  background: var(--green-soft);
   color: var(--green);
 }
 
 .client-status--not-paid {
+  background: var(--red-soft);
   color: var(--red);
-}
-
-.client-status--partially-paid {
-  color: var(--orange-deep);
 }
 
 .client-details-page {
@@ -98,7 +97,7 @@
 
 .client-information {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 15px;
   margin-bottom: 24px;
 }
@@ -224,8 +223,8 @@
   }
 
   .client-list-card {
-    padding: 24px 15px;
-    border-radius: 23px;
+    padding: 0;
+    border-radius: 14px;
   }
 
   .client-list-heading,
