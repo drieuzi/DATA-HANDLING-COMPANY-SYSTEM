@@ -13,6 +13,7 @@ const clientRoutes = require("./routes/clientroutes");
 const paymentRoutes = require("./routes/paymentroutes");
 const reportRoutes = require("./routes/reportRoutes");
 const auditRoutes = require("./routes/auditRoutes");
+const outsideServiceRoutes = require("./routes/outsideserviceroutes");
 const { errorHandler, notFoundHandler } = require("./middleware/errormiddleware");
 
 const app = express();
@@ -50,6 +51,7 @@ app.use("/api/clients", clientRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api/dashboard", reportRoutes);
 app.use("/api/audit-logs", auditRoutes);
+app.use("/api/outside-services", outsideServiceRoutes);
 app.use("/api", notFoundHandler);
 
 if (isProduction) {

@@ -57,6 +57,10 @@
   background: var(--white);
 }
 
+.analytics-total-card {
+  background: var(--white);
+}
+
 .cheque-card,
 .data-badge,
 .login-title,
@@ -89,8 +93,7 @@
 .voucher-card,
 .activity-card,
 .sales-report-card,
-.record-dialog,
-.purchase-dialog {
+.record-dialog {
   box-shadow: 0 12px 30px var(--shadow-color);
 }
 
@@ -106,4 +109,164 @@
   border-color: var(--orange-accent);
   background: var(--orange-accent);
   color: var(--black);
+}
+
+/* Approved white-minimal Illuminux palette for day mode only. */
+:root[data-theme="light"] .dashboard-page,
+:root[data-theme="light"] .supplier-page,
+:root[data-theme="light"] .client-page,
+:root[data-theme="light"] .client-details-page,
+:root[data-theme="light"] .financial-records-page,
+:root[data-theme="light"] .voucher-page,
+:root[data-theme="light"] .total-sales-page,
+:root[data-theme="light"] .total-purchases-page,
+:root[data-theme="light"] .admin-users-page,
+:root[data-theme="light"] .login-page {
+  background: var(--page-bg);
+}
+
+:root[data-theme="light"] .track-record-header,
+:root[data-theme="light"] .transactions-title-row,
+:root[data-theme="light"] .client-records-heading,
+:root[data-theme="light"] .financial-records-heading,
+:root[data-theme="light"] .management-heading,
+:root[data-theme="light"] .sales-month-title,
+:root[data-theme="light"] .record-dialog__header,
+:root[data-theme="light"] .company-list-table th,
+:root[data-theme="light"] .transactions-table th,
+:root[data-theme="light"] .client-record-table th,
+:root[data-theme="light"] .financial-record-table th,
+:root[data-theme="light"] .sales-report-table thead th,
+:root[data-theme="light"] .account-table th {
+  background: var(--peach-strong);
+  color: var(--black);
+}
+
+:root[data-theme="light"] .dashboard-menu,
+:root[data-theme="light"] .dashboard-card,
+:root[data-theme="light"] .analytics-card,
+:root[data-theme="light"] .analytics-totals div,
+:root[data-theme="light"] .analytics-total-card,
+:root[data-theme="light"] .totals-card,
+:root[data-theme="light"] .expenses-chart,
+:root[data-theme="light"] .supplier-list-card,
+:root[data-theme="light"] .client-list-card,
+:root[data-theme="light"] .supplier-summary div,
+:root[data-theme="light"] .client-information div,
+:root[data-theme="light"] .supplier-transactions,
+:root[data-theme="light"] .client-records,
+:root[data-theme="light"] .financial-records-card,
+:root[data-theme="light"] .voucher-summary div,
+:root[data-theme="light"] .voucher-card,
+:root[data-theme="light"] .activity-card,
+:root[data-theme="light"] .sales-report-card,
+:root[data-theme="light"] .record-tabs,
+:root[data-theme="light"] .management-toolbar,
+:root[data-theme="light"] .record-dialog,
+:root[data-theme="light"] .auth-card,
+:root[data-theme="light"] .auth-card__inner,
+:root[data-theme="light"] .admin-workspace,
+:root[data-theme="light"] .accounts-panel {
+  background: var(--white);
+  color: var(--black);
+}
+
+:root[data-theme="light"] .record-tabs button.active,
+:root[data-theme="light"] .record-tabs button:hover,
+:root[data-theme="light"] .theme-toggle,
+:root[data-theme="light"] .data-badge,
+:root[data-theme="light"] .login-title,
+:root[data-theme="light"] .cheque-card,
+:root[data-theme="light"] .detail-record-filters,
+:root[data-theme="light"] .account-stats {
+  background: var(--yellow-light);
+  color: var(--black);
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  background: var(--white);
+  color: var(--black);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] input:focus,
+:root[data-theme="light"] select:focus,
+:root[data-theme="light"] textarea:focus {
+  border-color: var(--orange-accent);
+  box-shadow: 0 0 0 3px var(--orange-wash);
+}
+
+:root[data-theme="light"] .primary-button,
+:root[data-theme="light"] .add-record-button,
+:root[data-theme="light"] .save-button,
+:root[data-theme="light"] .login-button {
+  background: var(--black);
+  color: var(--white);
+}
+
+:root[data-theme="light"] .primary-button:hover,
+:root[data-theme="light"] .add-record-button:hover,
+:root[data-theme="light"] .save-button:hover,
+:root[data-theme="light"] .login-button:hover {
+  background: var(--orange-deep);
+  color: var(--white);
+}
+
+/* Dashboard uses the same page canvas as every records page. */
+:root[data-theme="light"] .dashboard-menu,
+:root[data-theme="light"] .analytics-card,
+:root[data-theme="light"] .totals-card {
+  border-color: var(--black);
+  background: var(--white);
+}
+
+:root[data-theme="light"] .dashboard-card,
+:root[data-theme="light"] .admin-dashboard-card,
+:root[data-theme="light"] .summary-card,
+:root[data-theme="light"] .cheque-card,
+:root[data-theme="light"] .analytics-heading,
+:root[data-theme="light"] .expenses-chart,
+:root[data-theme="light"] .analytics-totals span {
+  border-color: var(--black);
+  background: var(--peach-strong);
+  color: var(--black);
+}
+
+:root[data-theme="light"] .analytics-totals div {
+  border-color: var(--black);
+  background: var(--white);
+}
+
+:root[data-theme="light"] .analytics-total-card {
+  border-color: var(--black);
+  background: var(--white);
+}
+
+/* Total Sales follows the white-minimal records layout. */
+:root[data-theme="light"] .sales-report-card {
+  border-color: var(--black);
+  background: var(--white);
+}
+
+:root[data-theme="light"] .sales-report-card .financial-records-heading,
+:root[data-theme="light"] .sales-month-title,
+:root[data-theme="light"] .sales-report-table thead th,
+:root[data-theme="light"] .sales-report-table tfoot th,
+:root[data-theme="light"] .sales-report-table tfoot td {
+  border-color: var(--black);
+  background: var(--peach-strong);
+  color: var(--black);
+}
+
+:root[data-theme="light"] .sales-report-toolbar,
+:root[data-theme="light"] .sales-report-table,
+:root[data-theme="light"] .sales-report-table tbody td {
+  background: var(--white);
+}
+
+:root[data-theme="light"] .sales-report-table th,
+:root[data-theme="light"] .sales-report-table td {
+  border-color: var(--black);
 }

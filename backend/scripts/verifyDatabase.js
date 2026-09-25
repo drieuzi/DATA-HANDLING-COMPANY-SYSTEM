@@ -11,6 +11,7 @@ const REQUIRED_TABLES = [
   "supplier_transactions",
   "vouchers",
   "payments",
+  "outside_services",
   "audit_logs",
   "system_counters"
 ];
@@ -103,6 +104,7 @@ async function verifyDatabase() {
   console.log("Deletion policy: User deletions are restorable; Admin deletions remain audit-only");
   console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
+  console.log("Outside services: item, amount, and service date included in monthly analytics");
   console.log(`Next voucher number: ${String(Number(voucherCounterResult.rows[0].current_value) + 1).padStart(6, "0")}`);
 }
 

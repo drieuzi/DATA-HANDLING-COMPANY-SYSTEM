@@ -11,6 +11,7 @@ import "./styles/financial-records.css";
 import "./styles/record-management.css";
 import "./styles/vouchers.css";
 import "./styles/total-sales.css";
+import "./styles/outside-services.css";
 import "./styles/record-tabs.css";
 import "./styles/borders.css";
 import "./styles/soft-theme.css";

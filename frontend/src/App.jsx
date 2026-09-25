@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
@@ -8,6 +8,7 @@ import ClientDetailsPage from "./pages/ClientDetailsPage.jsx";
 import VouchersPage from "./pages/VouchersPage.jsx";
 import TotalSalesPage from "./pages/TotalSalesPage.jsx";
 import TotalPurchasesPage from "./pages/TotalPurchasesPage.jsx";
+import OutsideServicesPage from "./pages/OutsideServicesPage.jsx";
 import AdminUsersPage from "./pages/AdminUsersPage.jsx";
 import { getCurrentUser, logout, USE_DEMO_DATA } from "./services/authApi.js";
 import {
@@ -28,6 +29,9 @@ import {
   listClients, recordClientPayment, restoreClient, restoreClientTransaction,
   updateClient, updateClientTransaction
 } from "./services/clientApi.js";
+import {
+  createOutsideService, deleteOutsideService, listOutsideServices, updateOutsideService
+} from "./services/outsideServiceApi.js";
 import { demoSuppliers } from "./data/demoSuppliers.js";
 import { demoClients } from "./data/demoClients.js";
 import { calculateBillingStatus, calculateCompanyStatus, createRecordId } from "./utils/recordHelpers.js";
@@ -48,6 +52,7 @@ export default function App() {
   const [suppliers, setSuppliers] = useState(USE_DEMO_DATA ? demoSuppliers : []);
   const [clients, setClients] = useState(USE_DEMO_DATA ? demoClients : []);
   const [vouchers, setVouchers] = useState([]);
+  const [outsideServices, setOutsideServices] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
 
   useEffect(() => {
@@ -78,33 +83,20 @@ export default function App() {
   async function refreshBackendData(account = user) {
     if (!account || USE_DEMO_DATA) return;
     const isAdmin = account.role === "admin";
-    const [supplierRecords, clientRecords, voucherRecords, activityRecords] = await Promise.all([
+    const [supplierRecords, clientRecords, voucherRecords, outsideServiceRecords, activityRecords] = await Promise.all([
       listSuppliers(isAdmin), listClients(isAdmin), listVouchers(isAdmin),
+      listOutsideServices(),
       isAdmin ? listAuditLogs(100) : Promise.resolve([])
     ]);
     setSuppliers(supplierRecords);
     setClients(clientRecords);
     setVouchers(voucherRecords);
+    setOutsideServices(outsideServiceRecords);
     setAuditLog(activityRecords);
   }
 
   const selectedSupplier = suppliers.find((item) => item.id === selectedSupplierId);
   const selectedClient = clients.find((item) => item.id === selectedClientId);
-  const recordSummary = useMemo(() => {
-    const purchases = suppliers.filter((item) => !item.deletedAt)
-      .flatMap((item) => item.transactions.filter((transaction) => !transaction.deletedAt));
-    const sales = clients.filter((item) => !item.deletedAt)
-      .flatMap((item) => item.transactions.filter((transaction) => !transaction.deletedAt));
-    return {
-      payables: purchases.reduce((sum, item) => sum + Number(item.balance || 0), 0),
-      receivables: sales.reduce((sum, item) => sum + Number(item.balance || 0), 0),
-      totalPurchases: purchases
-        .filter((item) => item.billingStatus === "Paid" || Number(item.balance) === 0)
-        .reduce((sum, item) => sum + Number(item.amount || 0), 0),
-      totalSales: sales.reduce((sum, item) => sum + Number(item.amount || 0), 0)
-    };
-  }, [suppliers, clients]);
-
   function addLocalAudit(action, details, entityType = null, entityId = null) {
     setAuditLog((current) => [{
       id: createRecordId("activity"), action, details, entityType, entityId,
@@ -347,6 +339,44 @@ export default function App() {
     setAppMessage("Voucher is permanently unrestorable. Audit history was kept.");
   }
 
+  async function saveOutsideService(serviceId, values) {
+    if (USE_DEMO_DATA) {
+      if (serviceId) {
+        setOutsideServices((current) => current.map((item) => item.id === serviceId
+          ? { ...item, ...values, amount: Number(values.amount), updatedAt: new Date().toISOString() }
+          : item));
+        addLocalAudit("OUTSIDE_SERVICE_UPDATED", values, "outside_service", serviceId);
+      } else {
+        const created = {
+          ...values,
+          id: createRecordId("outside-service"),
+          amount: Number(values.amount),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setOutsideServices((current) => [created, ...current]);
+        addLocalAudit("OUTSIDE_SERVICE_CREATED", values, "outside_service", created.id);
+      }
+    } else {
+      if (serviceId) await updateOutsideService(serviceId, values);
+      else await createOutsideService(values);
+      await refreshBackendData();
+    }
+    setAppMessage(serviceId ? "Outside service updated." : "Outside service added to monthly expenses.");
+  }
+
+  async function removeOutsideService(serviceId) {
+    if (USE_DEMO_DATA) {
+      const service = outsideServices.find((item) => item.id === serviceId);
+      setOutsideServices((current) => current.filter((item) => item.id !== serviceId));
+      addLocalAudit("OUTSIDE_SERVICE_DELETED", service || {}, "outside_service", serviceId);
+    } else {
+      await deleteOutsideService(serviceId);
+      await refreshBackendData();
+    }
+    setAppMessage("Outside service deleted and removed from monthly analytics.");
+  }
+
   if (authLoading) return <div className="auth-loading" role="status">Loading Illuminux system…</div>;
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
@@ -363,12 +393,14 @@ export default function App() {
     page = <TotalSalesPage clients={clients} onBack={() => setCurrentPage("dashboard")} />;
   } else if (currentPage === "total-purchases") {
     page = <TotalPurchasesPage suppliers={suppliers} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} />;
+  } else if (currentPage === "outside-services") {
+    page = <OutsideServicesPage user={user} services={outsideServices} onBack={() => setCurrentPage("dashboard")} onSave={saveOutsideService} onDelete={removeOutsideService} />;
   } else if (currentPage === "supplier-details" && selectedSupplier) {
     page = <SupplierDetailsPage supplier={selectedSupplier} user={user} onBack={() => setCurrentPage("suppliers")} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onRestoreTransaction={recoverSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} />;
   } else if (currentPage === "client-details" && selectedClient) {
     page = <ClientDetailsPage client={selectedClient} user={user} onBack={() => setCurrentPage("clients")} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onRestoreTransaction={recoverClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} />;
   } else {
-    page = <DashboardPage user={user} onLogout={handleLogout} recordSummary={recordSummary} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenAdmin={() => setCurrentPage("admin-users")} />;
+    page = <DashboardPage user={user} onLogout={handleLogout} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenOutsideServices={() => setCurrentPage("outside-services")} onOpenAdmin={() => setCurrentPage("admin-users")} />;
   }
 
   return <>{dataLoading && <div className="app-data-loading" role="status">Refreshing records…</div>}{appMessage && <div className="dashboard-notice" role="status">{appMessage}</div>}{page}</>;

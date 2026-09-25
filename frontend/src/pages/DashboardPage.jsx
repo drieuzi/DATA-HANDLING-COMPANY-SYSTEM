@@ -10,16 +10,6 @@ import {
   normalizeDashboardData
 } from "../utils/dashboardCalculations.js";
 
-const MODULE_LABELS = {
-  clients: "Clients",
-  suppliers: "Suppliers",
-  receivables: "Receivables",
-  payables: "Payables",
-  sales: "Total Sales",
-  cheques: "Voucher Cheque",
-  analytics: "Monthly Expenses Analytics"
-};
-
 export default function DashboardPage({
   user,
   onLogout,
@@ -28,8 +18,8 @@ export default function DashboardPage({
   onOpenVouchers,
   onOpenSales,
   onOpenPurchases,
+  onOpenOutsideServices,
   onOpenAdmin,
-  recordSummary,
   voucherCount
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
@@ -69,10 +59,6 @@ export default function DashboardPage({
     [dashboardData.monthlyExpenses]
   );
 
-  function openFutureModule(moduleName) {
-    setNotice(`${MODULE_LABELS[moduleName]} module is prepared for the next development step.`);
-  }
-
   return (
     <div className="app-page dashboard-page">
       <Header user={user} onLogout={onLogout} />
@@ -103,24 +89,23 @@ export default function DashboardPage({
         </section>
 
         <section className="analytics-card" aria-labelledby="analyticsTitle">
-          <button
+          <h2
             className="analytics-heading"
             id="analyticsTitle"
-            type="button"
-            onClick={() => openFutureModule("analytics")}
           >
             Monthly Expenses Analytics
-          </button>
+          </h2>
           <ExpensesChart monthlyExpenses={dashboardData.monthlyExpenses} />
           <div className="analytics-totals" aria-label="Expense analytics totals">
             <div>
               <span>Supplier Payables</span>
               <strong>{formatCurrency(purchaseTotals.payablePurchases)}</strong>
             </div>
-            <div>
+            <button className="analytics-total-card" type="button" onClick={onOpenOutsideServices}>
               <span>Outside Services</span>
               <strong>{formatCurrency(purchaseTotals.outsideServices)}</strong>
-            </div>
+              <small>View records</small>
+            </button>
             <div>
               <span>Total Expenses</span>
               <strong>{formatCurrency(purchaseTotals.totalExpenses)}</strong>
@@ -132,13 +117,11 @@ export default function DashboardPage({
           <DashboardCard
             className="summary-card"
             label="Total Sales"
-            value={formatCurrency(recordSummary?.totalSales ?? dashboardData.totalSales)}
             onClick={onOpenSales}
           />
           <DashboardCard
             className="summary-card"
             label="Total Purchase"
-            value={formatCurrency(recordSummary?.totalPurchases ?? purchaseTotals.payablePurchases)}
             onClick={onOpenPurchases}
           />
         </section>

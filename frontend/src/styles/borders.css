@@ -13,6 +13,7 @@
 .dashboard-card,
 .expenses-chart,
 .analytics-totals div,
+.analytics-total-card,
 .supplier-list-card,
 .client-list-card,
 .supplier-summary div,
@@ -25,8 +26,7 @@
 .voucher-card,
 .activity-card,
 .sales-report-card,
-.record-dialog,
-.purchase-dialog {
+.record-dialog {
   border: 2px solid var(--border);
 }
 

@@ -1,6 +1,6 @@
 const VIEWBOX_WIDTH = 640;
 const VIEWBOX_HEIGHT = 260;
-const CHART_TOP = 18;
+const CHART_TOP = 34;
 const CHART_BOTTOM = 215;
 const CHART_LEFT = 34;
 const CHART_RIGHT = 620;
@@ -31,7 +31,7 @@ export default function ExpensesChart({ monthlyExpenses }) {
       >
         <title id="chartTitle">Monthly expenses analytics</title>
         <desc id="chartDescription">
-          Stacked monthly expenses showing transactions with other companies and outside services.
+          One bar per month showing the combined total of supplier payments and outside services.
         </desc>
 
         <line
@@ -44,11 +44,9 @@ export default function ExpensesChart({ monthlyExpenses }) {
 
         {monthlyExpenses.map((item, index) => {
           const centerX = CHART_LEFT + slotWidth * index + slotWidth / 2;
-          const payablesHeight = (item.payables / maximum) * chartHeight;
-          const servicesHeight = (item.outsideServices / maximum) * chartHeight;
-          const payablesY = CHART_BOTTOM - payablesHeight;
-          const servicesY = payablesY - servicesHeight;
           const total = item.payables + item.outsideServices;
+          const totalHeight = (total / maximum) * chartHeight;
+          const totalY = CHART_BOTTOM - totalHeight;
 
           return (
             <g key={item.month}>
@@ -56,21 +54,18 @@ export default function ExpensesChart({ monthlyExpenses }) {
                 {`${item.month}: ₱${total.toLocaleString("en-PH")} total expenses`}
               </title>
               <rect
-                className="chart-bar chart-bar--payables"
+                className="chart-bar chart-bar--total"
                 x={centerX - barWidth / 2}
-                y={payablesY}
+                y={totalY}
                 width={barWidth}
-                height={payablesHeight}
+                height={totalHeight}
                 rx="4"
               />
-              <rect
-                className="chart-bar chart-bar--services"
-                x={centerX - barWidth / 2}
-                y={servicesY}
-                width={barWidth}
-                height={servicesHeight}
-                rx="4"
-              />
+              {total > 0 && (
+                <text className="chart-value" x={centerX} y={Math.max(totalY - 7, 16)} textAnchor="middle">
+                  ₱{compactCurrency(total)}
+                </text>
+              )}
               <text className="chart-month" x={centerX} y="242" textAnchor="middle">
                 {item.month}
               </text>
@@ -84,8 +79,7 @@ export default function ExpensesChart({ monthlyExpenses }) {
       </div>
 
       <div className="chart-legend" aria-label="Expense chart legend">
-        <span><i className="legend-payables" />Supplier payables</span>
-        <span><i className="legend-services" />Outside services</span>
+        <span><i className="legend-total" />Monthly total expenses</span>
       </div>
     </div>
   );

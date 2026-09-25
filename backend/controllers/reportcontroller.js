@@ -10,7 +10,15 @@ async function dashboard(request, response, next) {
       throw new HttpError(400, "Enter a valid dashboard year.");
     }
 
-    const [transactionTotals, clientTotals, paymentTotals, monthlyResult, voucherResult] = await Promise.all([
+    const [
+      transactionTotals,
+      clientTotals,
+      paymentTotals,
+      monthlyResult,
+      outsideServiceTotals,
+      outsideServiceMonthly,
+      voucherResult
+    ] = await Promise.all([
       pool.query(
         `SELECT
            COALESCE(SUM(amount) FILTER (WHERE billing_status = 'Paid'), 0) AS total_purchases,
@@ -39,6 +47,19 @@ async function dashboard(request, response, next) {
         [year]
       ),
       pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS current_month_expenses
+         FROM outside_services
+         WHERE DATE_TRUNC('month', service_date) = DATE_TRUNC('month', CURRENT_DATE)`
+      ),
+      pool.query(
+        `SELECT EXTRACT(MONTH FROM service_date)::INTEGER AS month_number,
+           COALESCE(SUM(amount), 0) AS total
+         FROM outside_services
+         WHERE EXTRACT(YEAR FROM service_date) = $1
+         GROUP BY month_number ORDER BY month_number`,
+        [year]
+      ),
+      pool.query(
         `SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL)::INTEGER AS total,
            COUNT(*) FILTER (WHERE payment_status = 'Draft' AND deleted_at IS NULL)::INTEGER AS draft,
            COUNT(*) FILTER (WHERE payment_status = 'Issued' AND deleted_at IS NULL)::INTEGER AS issued,
@@ -49,6 +70,9 @@ async function dashboard(request, response, next) {
     ]);
 
     const monthlyMap = new Map(monthlyResult.rows.map((row) => [row.month_number, Number(row.total)]));
+    const outsideServiceMap = new Map(
+      outsideServiceMonthly.rows.map((row) => [row.month_number, Number(row.total)])
+    );
     const totals = transactionTotals.rows[0];
     const salesTotals = clientTotals.rows[0];
     response.json({
@@ -59,12 +83,14 @@ async function dashboard(request, response, next) {
       payables: Number(totals.total_unpaid_payables),
       paidTransactions: totals.paid_count,
       notPaidTransactions: totals.not_paid_count,
-      currentMonthExpenses: Number(paymentTotals.rows[0].current_month_expenses),
+      currentMonthExpenses:
+        Number(paymentTotals.rows[0].current_month_expenses)
+        + Number(outsideServiceTotals.rows[0].current_month_expenses),
       voucherCounts: voucherResult.rows[0],
       monthlyExpenses: MONTHS.map((month, index) => ({
         month,
         payables: monthlyMap.get(index + 1) || 0,
-        outsideServices: 0
+        outsideServices: outsideServiceMap.get(index + 1) || 0
       }))
     });
   } catch (error) { next(error); }

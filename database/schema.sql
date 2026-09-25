@@ -360,6 +360,22 @@ CREATE INDEX IF NOT EXISTS client_payments_transaction_index
 CREATE INDEX IF NOT EXISTS client_payments_client_index
     ON client_payments (client_id, payment_date DESC);
 
+CREATE TABLE IF NOT EXISTS outside_services (
+    id BIGSERIAL PRIMARY KEY,
+    item VARCHAR(200) NOT NULL,
+    amount NUMERIC(14, 2) NOT NULL,
+    service_date DATE NOT NULL,
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT outside_services_item_required CHECK (BTRIM(item) <> ''),
+    CONSTRAINT outside_services_positive_amount CHECK (amount > 0)
+);
+
+CREATE INDEX IF NOT EXISTS outside_services_date_index
+    ON outside_services (service_date DESC, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
     actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
@@ -621,6 +637,11 @@ CREATE TRIGGER client_transactions_set_updated_at
 BEFORE UPDATE ON client_transactions
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS outside_services_set_updated_at ON outside_services;
+CREATE TRIGGER outside_services_set_updated_at
+BEFORE UPDATE ON outside_services
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 COMMENT ON TABLE suppliers IS
     'Supplier master records. Deactivate suppliers instead of deleting financial history.';
 COMMENT ON TABLE supplier_transactions IS
@@ -637,6 +658,8 @@ COMMENT ON TABLE client_transactions IS
     'Sales transactions. Receivables are rows whose balance is greater than zero.';
 COMMENT ON TABLE client_payments IS
     'Client payment history that reduces client transaction balances.';
+COMMENT ON TABLE outside_services IS
+    'Outside service expenses counted in monthly analytics using service_date.';
 COMMENT ON TABLE audit_logs IS
     'Security and business activity history identifying the acting user.';
 COMMENT ON VIEW payable_records IS
