@@ -20,6 +20,10 @@ export function restoreClient(id) {
   return apiRequest(`/clients/${id}/restore`, { method: "PATCH" });
 }
 
+export function permanentlyDeleteClient(id) {
+  return apiRequest(`/clients/${id}/permanent`, { method: "DELETE" });
+}
+
 export async function createClientTransaction(clientId, values) {
   return (await apiRequest("/clients/transactions", {
     method: "POST", body: JSON.stringify({ ...values, clientId })

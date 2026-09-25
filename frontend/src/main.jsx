@@ -16,6 +16,7 @@ import "./styles/record-tabs.css";
 import "./styles/borders.css";
 import "./styles/soft-theme.css";
 import "./styles/admin-users.css";
+import "./styles/audit-table.css";
 
 const savedTheme = localStorage.getItem("illuminux-color-theme");
 const initialTheme = savedTheme === "light" || savedTheme === "dark"

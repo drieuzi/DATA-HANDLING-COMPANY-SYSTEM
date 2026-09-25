@@ -6,7 +6,7 @@ import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
-export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onSaveSupplier, onDeleteSupplier }) {
+export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onSaveSupplier, onDeleteSupplier, onRestoreSupplier, onPermanentDeleteSupplier }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [companyEditorOpen, setCompanyEditorOpen] = useState(false);
@@ -14,7 +14,8 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
   const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const activeTransactions = supplier.transactions.filter((transaction) => !transaction.deletedAt);
-  const summary = activeTransactions.reduce(
+  const summaryTransactions = supplier.deletedAt && isAdmin ? supplier.transactions : activeTransactions;
+  const summary = summaryTransactions.reduce(
     (totals, transaction) => ({
       amount: totals.amount + transaction.amount,
       balance: totals.balance + transaction.balance
@@ -30,7 +31,6 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
       transaction.voucherNumber,
       transaction.salesInvoice,
       transaction.purchaseOrder,
-      transaction.collectionReceipt,
       transaction.voucherDate,
       transaction.amount,
       transaction.balance,
@@ -47,7 +47,15 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
 
       <main className="supplier-details-main">
         <PageBackButton label="Back to Supplier Names and Records" onClick={onBack} />
-        <div className="management-toolbar"><span>Company controls</span><div className="row-actions"><button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Supplier</button><button className="danger-action" type="button" onClick={async () => { if (!window.confirm(`Delete ${supplier.name}? ${isAdmin ? "This will permanently hide the record while keeping its audit history." : "An admin can restore this record later."}`)) return; try { await onDeleteSupplier(supplier.id, "Deleted from supplier track record"); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Supplier</button></div></div>
+        <div className="management-toolbar"><span>{supplier.deletedAt ? "Deleted company controls" : "Company controls"}</span><div className="row-actions">
+          {supplier.deletedAt ? <>
+            <button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore Supplier</button>
+            <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this supplier and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
+          </> : <>
+            <button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Supplier</button>
+            <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt(`Reason for deleting ${supplier.name}:`); if (!reason?.trim()) return; if (!window.confirm(`Delete ${supplier.name} and its linked transactions? An Admin can restore them later.`)) return; try { await onDeleteSupplier(supplier.id, reason.trim()); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Supplier</button>
+          </>}
+        </div></div>
         <section className="supplier-summary" aria-label={`${supplier.name} summary`}>
           <div>
             <span>Supplier</span>
@@ -73,7 +81,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
               <p>Supplier records</p>
               <h2 id="transactionsTitle">Transactions</h2>
             </div>
-            <div className="heading-actions"><span>{activeTransactions.length} active record(s)</span><button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button></div>
+            <div className="heading-actions"><span>{activeTransactions.length} active record(s)</span>{!supplier.deletedAt && <button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button>}</div>
           </div>
 
           <div className="detail-record-filters">
@@ -81,7 +89,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
               <span>Search transactions</span>
               <input
                 type="search"
-                placeholder="Search voucher, P.O., S.I., or C.R."
+                placeholder="Search voucher, P.O., or S.I."
                 value={transactionSearch}
                 onChange={(event) => setTransactionSearch(event.target.value)}
               />
@@ -92,6 +100,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                 <option>All</option>
                 <option>Not Paid</option>
                 <option>Paid</option>
+                {isAdmin && <option>Deleted</option>}
               </select>
             </label>
           </div>
@@ -104,7 +113,6 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                   <th>Voucher Date</th>
                   <th>S.I. #</th>
                   <th>P.O. #</th>
-                  <th>C.R. #</th>
                   <th>Amount</th>
                   <th>Balance</th>
                   <th>Billing Status</th>
@@ -118,7 +126,6 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                     <td>{formatRecordDate(transaction.voucherDate)}</td>
                     <td>{transaction.salesInvoice}</td>
                     <td>{transaction.purchaseOrder}</td>
-                    <td>{transaction.collectionReceipt}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
                     <td>{formatCurrency(transaction.balance)}</td>
                     <td>
@@ -133,10 +140,10 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                     <td><div className="row-actions">
                       {!transaction.deletedAt && <button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button>}
                       {!transaction.deletedAt && <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt("Reason for deleting this transaction:"); if (!reason?.trim()) return; try { await onDeleteTransaction(transaction.id, reason.trim()); } catch (error) { window.alert(error.message); } }}>Delete</button>}
-                      {isAdmin && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
+                      {isAdmin && !supplier.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                )) : <tr><td className="detail-records-empty" colSpan="9">No supplier transactions match these filters.</td></tr>}
+                )) : <tr><td className="detail-records-empty" colSpan="8">No supplier transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>

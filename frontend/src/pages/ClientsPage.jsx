@@ -15,6 +15,7 @@ export default function ClientsPage({
   onSaveClient,
   onDeleteClient,
   onRestoreClient,
+  onPermanentDeleteClient,
   activeTab,
   onTabChange
 }) {
@@ -31,6 +32,7 @@ export default function ClientsPage({
       const status = client.deletedAt ? "deleted" : client.billingStatus?.toLowerCase();
       return status === statusFilter;
     });
+
 
   return (
     <div className="app-page client-page">
@@ -116,8 +118,8 @@ export default function ClientsPage({
                           <button
                             className="client-name-button"
                             type="button"
-                            onClick={() => !client.deletedAt && onSelectClient(client)}
-                            disabled={Boolean(client.deletedAt)}
+                            onClick={() => (!client.deletedAt || isAdmin) && onSelectClient(client)}
+                            disabled={Boolean(client.deletedAt && !isAdmin)}
                             aria-label={`Open ${client.name} client records`}
                           >
                             {client.name}
@@ -126,7 +128,10 @@ export default function ClientsPage({
                         <td>
                           <div className="client-row-controls">
                             <span className={`client-status client-status--${client.billingStatus?.toLowerCase().replaceAll(" ", "-") || "not-paid"}`}>{client.deletedAt ? "Deleted" : client.billingStatus}</span>
-                            {isAdmin && client.deletedAt && client.restoreAllowed !== false && <div className="row-actions"><button type="button" onClick={async () => { try { await onRestoreClient(client.id); } catch (error) { window.alert(error.message); } }}>Restore</button></div>}
+                            {isAdmin && client.deletedAt && client.restoreAllowed !== false && <div className="row-actions">
+                              <button type="button" onClick={async () => { try { await onRestoreClient(client.id); } catch (error) { window.alert(error.message); } }}>Restore</button>
+                              <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this client and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteClient(client.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
+                            </div>}
                           </div>
                         </td>
                       </tr>

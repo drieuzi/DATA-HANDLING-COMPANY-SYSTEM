@@ -19,6 +19,7 @@ function mapTransaction(row) {
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
     restoreAllowed: row.restore_allowed !== false,
+    deletedWithCompany: row.deleted_with_company === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -158,23 +159,25 @@ async function deleteClient(request, response, next) {
     const clientId = validate.id(request.params.id, "Client ID");
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await client.query("BEGIN");
-    const linked = await client.query(
-      "SELECT COUNT(*)::INTEGER AS count FROM client_transactions WHERE client_id = $1 AND deleted_at IS NULL",
-      [clientId]
-    );
-    if (linked.rows[0].count > 0) throw new HttpError(409, "Delete the client's active transactions before deleting the client.");
     const result = await client.query(
       `UPDATE clients SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, is_active = FALSE, restore_allowed = $3
-       WHERE id = $4 AND deleted_at IS NULL RETURNING id, name`,
-      [request.user.id, reason, request.user.role !== "admin", clientId]
+         deletion_reason = $2, is_active = FALSE, restore_allowed = TRUE
+       WHERE id = $3 AND deleted_at IS NULL RETURNING id, name`,
+      [request.user.id, reason, clientId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Client not found.");
+    const linked = await client.query(
+      `UPDATE client_transactions SET deleted_at = NOW(), deleted_by = $1,
+         deletion_reason = $2, restore_allowed = TRUE, deleted_with_company = TRUE
+       WHERE client_id = $3 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, clientId]
+    );
     await writeAudit(client, request, "CLIENT_DELETED", "client", clientId, {
-      reason, name: result.rows[0].name, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+      reason, name: result.rows[0].name, deletionMode: "restorable",
+      linkedTransactionsDeleted: linked.rowCount
     });
     await client.query("COMMIT");
-    response.json({ message: request.user.role === "admin" ? "Client permanently hidden. Audit history was kept." : "Client moved to deleted records." });
+    response.json({ message: `Client and ${linked.rowCount} linked transaction(s) moved to deleted records.` });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -193,9 +196,47 @@ async function restoreClient(request, response, next) {
       [clientId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted client not found.");
-    await writeAudit(client, request, "CLIENT_RESTORED", "client", clientId, { name: result.rows[0].name });
+    const linked = await client.query(
+      `UPDATE client_transactions SET deleted_at = NULL, deleted_by = NULL,
+         deletion_reason = NULL, restore_allowed = TRUE, deleted_with_company = FALSE
+       WHERE client_id = $1 AND deleted_with_company = TRUE AND restore_allowed = TRUE
+       RETURNING id`,
+      [clientId]
+    );
+    await writeAudit(client, request, "CLIENT_RESTORED", "client", clientId, {
+      name: result.rows[0].name, linkedTransactionsRestored: linked.rowCount
+    });
     await client.query("COMMIT");
     response.json({ client: mapClient(result.rows[0]), message: "Client restored." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteClient(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const clientId = validate.id(request.params.id, "Client ID");
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE clients SET restore_allowed = FALSE
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING id, name`,
+      [clientId]
+    );
+    if (!result.rows[0]) throw new HttpError(404, "Restorable deleted client not found.");
+    const linked = await client.query(
+      `UPDATE client_transactions SET restore_allowed = FALSE, deleted_with_company = FALSE
+       WHERE client_id = $1 RETURNING id`,
+      [clientId]
+    );
+    await writeAudit(client, request, "CLIENT_PERMANENTLY_DELETED", "client", clientId, {
+      name: result.rows[0].name, linkedTransactionsMadeUnrestorable: linked.rowCount,
+      deletionMode: "unrestorable"
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Client and its linked records are now permanently unrestorable. Audit history was kept." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -281,7 +322,7 @@ async function deleteTransaction(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE client_transactions SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, restore_allowed = $3
+         deletion_reason = $2, restore_allowed = $3, deleted_with_company = FALSE
        WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
       [request.user.id, reason, request.user.role !== "admin", transactionId]
     );
@@ -304,7 +345,7 @@ async function restoreTransaction(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE client_transactions ct SET deleted_at = NULL, deleted_by = NULL,
-         deletion_reason = NULL, restore_allowed = TRUE
+         deletion_reason = NULL, restore_allowed = TRUE, deleted_with_company = FALSE
        FROM clients c WHERE ct.id = $1 AND ct.client_id = c.id
          AND ct.deleted_at IS NOT NULL AND ct.restore_allowed = TRUE
          AND c.deleted_at IS NULL RETURNING ct.*`,
@@ -387,7 +428,9 @@ async function listReceivables(request, response, next) {
   try {
     const clientId = request.query.clientId ? validate.id(request.query.clientId, "Client ID") : null;
     const status = validate.text(request.query.status, "Status", { max: 20 });
-    if (status && status !== "Not Paid") throw new HttpError(400, "Receivable status must be Not Paid.");
+    if (status && !["Not Paid", "Paid"].includes(status)) {
+      throw new HttpError(400, "Receivable status must be Not Paid or Paid.");
+    }
     const result = await pool.query(
       `SELECT * FROM receivable_records
        WHERE ($1::BIGINT IS NULL OR client_id = $1)
@@ -404,6 +447,6 @@ async function listReceivables(request, response, next) {
 
 module.exports = {
   addPayment, createClient, createTransaction, deleteClient, deleteTransaction,
-  getClient, listClients, listReceivables, paymentHistory, restoreClient,
+  getClient, listClients, listReceivables, paymentHistory, permanentlyDeleteClient, restoreClient,
   restoreTransaction, updateClient, updateTransaction
 };

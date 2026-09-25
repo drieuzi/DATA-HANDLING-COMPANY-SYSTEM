@@ -7,19 +7,13 @@ import { formatRecordDate } from "../utils/recordHelpers.js";
 import { downloadVoucherForPrint } from "../utils/voucherDocument.js";
 import { getNextVoucherNumber } from "../services/voucherApi.js";
 
-function activityDetails(details) {
-  if (!details) return "";
-  if (typeof details === "string") return details;
-  return Object.entries(details).map(([key, value]) => `${key}: ${value}`).join(" · ");
-}
-
 function voucherStatus(voucher) {
   return voucher?.deletedAt ? "Deleted" : (voucher?.status || "Draft");
 }
 
 export default function VouchersPage({
-  user, suppliers, vouchers, auditLog, onBack, onCreate,
-  onEdit, onIssue, onDelete, onRestore, onPermanentDelete
+  user, suppliers, vouchers, onBack, onCreate,
+  onEdit, onIssue, onDelete
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
@@ -37,25 +31,6 @@ export default function VouchersPage({
   const issued = vouchers.filter((item) => voucherStatus(item) === "Issued");
   const cancelled = vouchers.filter((item) => voucherStatus(item) === "Cancelled");
   const totalCount = vouchers.filter((item) => !item.deletedAt).length;
-  const latestVoucherDeletionAudit = useMemo(() => {
-    const latest = new Map();
-    auditLog.forEach((item) => {
-      if (item.action === "VOUCHER_DELETED" && item.entityType === "voucher"
-        && item.entityId && !latest.has(String(item.entityId))) {
-        latest.set(String(item.entityId), item);
-      }
-    });
-    return latest;
-  }, [auditLog]);
-  const activityRows = useMemo(() => {
-    const recent = auditLog.slice(0, 8);
-    const included = new Set(recent.map((item) => item.id));
-    const requiredDeletionRows = [...latestVoucherDeletionAudit.values()]
-      .filter((item) => !included.has(item.id))
-      .filter((item) => vouchers.some((voucher) => String(voucher.id) === String(item.entityId)
-        && voucher.deletedAt && voucher.restoreAllowed !== false));
-    return [...recent, ...requiredDeletionRows];
-  }, [auditLog, latestVoucherDeletionAudit, vouchers]);
 
   async function runAction(action) {
     try { await action(); }
@@ -131,18 +106,6 @@ export default function VouchersPage({
             }) : <tr><td colSpan="8" className="financial-records-empty">No voucher records found.</td></tr>}</tbody>
           </table></div>
         </section>
-        {isAdmin && <section className="activity-card"><h2>Recent Audit Activity</h2>{activityRows.length ? <ul>{activityRows.map((item) => {
-          const voucher = vouchers.find((record) => String(record.id) === String(item.entityId));
-          const latestDeletion = latestVoucherDeletionAudit.get(String(item.entityId));
-          const canManageDeletedVoucher = item.action === "VOUCHER_DELETED"
-            && latestDeletion?.id === item.id
-            && voucher?.deletedAt
-            && voucher.restoreAllowed !== false;
-          return <li key={item.id}>
-            <div className="activity-entry"><strong>{item.action}</strong><span>{activityDetails(item.details)}</span><span>Performed by: {item.actorFullName || item.actorUsername || "Unknown account"}</span></div>
-            <div className="activity-meta"><time>{new Date(item.createdAt).toLocaleString("en-PH")}</time>{canManageDeletedVoucher && <div className="activity-actions"><button type="button" onClick={() => runAction(() => onRestore(voucher.id))}>Restore</button><button className="danger-action" type="button" onClick={() => { if (window.confirm("Are you sure you want to permanently delete this record? This action cannot be undone.")) runAction(() => onPermanentDelete(voucher.id)); }}>Delete</button></div>}</div>
-          </li>;
-        })}</ul> : <p>No activity yet.</p>}</section>}
       </main>
       <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={nextVoucherNumber} suppliers={suppliers} allowCancellation={!isAdmin} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />
       <VoucherEditorDialog isOpen={Boolean(editingVoucher)} voucher={editingVoucher} suppliers={suppliers} allowCancellation={!isAdmin} onSave={async (values) => { await onEdit(editingVoucher.id, values); setEditingVoucher(null); }} onClose={() => setEditingVoucher(null)} />

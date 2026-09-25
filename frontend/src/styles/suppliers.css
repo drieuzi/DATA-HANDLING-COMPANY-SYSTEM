@@ -130,8 +130,8 @@
 }
 
 .supplier-status--paid {
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--brown-status-soft);
+  color: var(--brown-status);
 }
 
 .supplier-status--not-paid {
@@ -243,8 +243,8 @@
 }
 
 .table-status--paid {
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--brown-status-soft);
+  color: var(--brown-status);
 }
 
 .table-status--not-paid {

@@ -109,7 +109,7 @@
 }
 
 .form-message.success {
-  color: var(--green);
+  color: var(--brown-status);
 }
 
 .submit-button {

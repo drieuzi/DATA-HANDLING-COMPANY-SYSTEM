@@ -4,7 +4,6 @@ import { formatRecordDate } from "../utils/recordHelpers.js";
 
 const columns = [
   { key: "companyName", label: "Company Name" },
-  { key: "purchaseOrder", label: "P.O. #" },
   { key: "salesInvoice", label: "S.I. #" },
   { key: "collectionReceipt", label: "C.R. #" },
   { key: "date", label: "Date", render: (row) => formatRecordDate(row.date) },
@@ -27,7 +26,7 @@ const columns = [
 
 export default function ReceivablesPage({ clients, onBack, embedded = false }) {
   const rows = clients.flatMap((client) =>
-    client.transactions.filter((transaction) => !transaction.deletedAt && Number(transaction.balance) > 0).map((transaction) => ({
+    client.transactions.filter((transaction) => !transaction.deletedAt).map((transaction) => ({
       ...transaction,
       companyId: client.id,
       companyName: client.name
@@ -41,6 +40,7 @@ export default function ReceivablesPage({ clients, onBack, embedded = false }) {
       rows={rows}
       onBack={onBack}
       embedded={embedded}
+      searchPlaceholder="Search company, S.I., C.R., or date…"
     />
   );
 }

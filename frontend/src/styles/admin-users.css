@@ -220,8 +220,8 @@
 }
 
 .status-dot.is-active {
-  color: var(--green);
-  background: var(--green-soft);
+  color: var(--brown-status);
+  background: var(--brown-status-soft);
 }
 
 .status-dot.is-inactive {
@@ -314,7 +314,7 @@
 }
 
 .admin-message.error { color: var(--red); }
-.admin-message.success { color: var(--green); }
+.admin-message.success { color: var(--brown-status); }
 
 .sr-only {
   position: absolute;

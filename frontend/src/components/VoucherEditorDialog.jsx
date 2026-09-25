@@ -107,8 +107,8 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
         </label>
         <label>Payable transaction
           <select name="transactionId" value={fields.transactionId || ""} onChange={updateField} disabled={!supplier || Boolean(voucher)} required>
-            <option value="">Select P.O. / S.I.</option>
-            {availableTransactions.map((item) => <option key={item.id} value={item.id}>P.O. {item.purchaseOrder} · S.I. {item.salesInvoice}</option>)}
+            <option value="">Select S.I. / P.O.</option>
+            {availableTransactions.map((item) => <option key={item.id} value={item.id}>S.I. {item.salesInvoice} / P.O. {item.purchaseOrder}</option>)}
           </select>
         </label>
         <label>Voucher Date<input type="date" name="voucherDate" value={fields.voucherDate || ""} onChange={updateField} required /></label>

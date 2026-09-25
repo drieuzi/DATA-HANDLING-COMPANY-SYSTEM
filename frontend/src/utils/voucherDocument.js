@@ -90,11 +90,9 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
   const contactPerson = supplier?.contactPerson || "";
   const purchaseOrder = transaction?.purchaseOrder || voucher.purchaseOrder || "";
   const salesInvoice = transaction?.salesInvoice || voucher.salesInvoice || "";
-  const collectionReceipt = transaction?.collectionReceipt || "";
   const paymentReference = [
     salesInvoice && salesInvoice !== "—" ? `S.I. ${salesInvoice}` : "",
-    purchaseOrder && purchaseOrder !== "—" ? `P.O. ${purchaseOrder}` : "",
-    collectionReceipt && collectionReceipt !== "—" ? `C.R. ${collectionReceipt}` : ""
+    purchaseOrder && purchaseOrder !== "—" ? `P.O. ${purchaseOrder}` : ""
   ].filter(Boolean).join(" / ");
   const particulars = paymentReference
     ? `Payment for ${paymentReference}`

@@ -14,6 +14,7 @@ export default function SuppliersPage({
   onSaveSupplier,
   onDeleteSupplier,
   onRestoreSupplier,
+  onPermanentDeleteSupplier,
   activeTab,
   onTabChange
 }) {
@@ -30,6 +31,7 @@ export default function SuppliersPage({
       const status = supplier.deletedAt ? "deleted" : supplier.billingStatus?.toLowerCase();
       return status === statusFilter;
     });
+
 
   return (
     <div className="app-page supplier-page">
@@ -114,8 +116,8 @@ export default function SuppliersPage({
                           <button
                             className="supplier-name-button"
                             type="button"
-                            onClick={() => !supplier.deletedAt && onSelectSupplier(supplier)}
-                            disabled={Boolean(supplier.deletedAt)}
+                            onClick={() => (!supplier.deletedAt || isAdmin) && onSelectSupplier(supplier)}
+                            disabled={Boolean(supplier.deletedAt && !isAdmin)}
                             aria-label={`Open ${supplier.name} supplier records`}
                           >
                             {supplier.name}
@@ -124,7 +126,10 @@ export default function SuppliersPage({
                         <td>
                           <div className="supplier-row-controls">
                             <span className={`supplier-status supplier-status--${supplier.billingStatus?.toLowerCase().replaceAll(" ", "-") || "not-paid"}`}>{supplier.deletedAt ? "Deleted" : supplier.billingStatus}</span>
-                            {isAdmin && supplier.deletedAt && supplier.restoreAllowed !== false && <div className="row-actions"><button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore</button></div>}
+                            {isAdmin && supplier.deletedAt && supplier.restoreAllowed !== false && <div className="row-actions">
+                              <button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore</button>
+                              <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this supplier and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
+                            </div>}
                           </div>
                         </td>
                       </tr>

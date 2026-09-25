@@ -53,7 +53,7 @@ export default function TotalSalesPage({ clients, onBack }) {
   );
 
   const rows = useMemo(() => monthlyRows.filter((transaction) => {
-    const searchText = `${transaction.companyName} ${transaction.purchaseOrder} ${transaction.voucherNumber || ""} ${transaction.date || ""}`.toLowerCase();
+    const searchText = `${transaction.companyName} ${transaction.purchaseOrder} ${transaction.collectionReceipt || ""} ${transaction.date || ""}`.toLowerCase();
     return searchText.includes(query.toLowerCase());
   }), [monthlyRows, query]);
 
@@ -87,7 +87,7 @@ export default function TotalSalesPage({ clients, onBack }) {
               <span>Search Records</span>
               <input
                 type="search"
-                placeholder="Company, P.O., or voucher number"
+                placeholder="Company, P.O., or C.R. number"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -103,7 +103,7 @@ export default function TotalSalesPage({ clients, onBack }) {
               <thead>
                 <tr>
                   <th>Company Name</th>
-                  <th>Voucher #</th>
+                  <th>C.R. #</th>
                   <th>P.O. #</th>
                   <th>Transaction Date</th>
                   <th>Exact Payment Date</th>
@@ -114,7 +114,7 @@ export default function TotalSalesPage({ clients, onBack }) {
                 {rows.length ? rows.map((transaction) => (
                   <tr key={`${transaction.companyId}-${transaction.id}`}>
                     <td>{transaction.companyName}</td>
-                    <td>{transaction.voucherNumber || "—"}</td>
+                    <td>{transaction.collectionReceipt || "—"}</td>
                     <td>{transaction.purchaseOrder}</td>
                     <td>{formatRecordDate(transaction.date)}</td>
                     <td>{formatPaymentDate(transaction.paymentDate)}</td>

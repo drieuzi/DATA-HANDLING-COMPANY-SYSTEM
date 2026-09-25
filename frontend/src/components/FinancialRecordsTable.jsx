@@ -3,7 +3,8 @@ import TrackRecordHeader from "./TrackRecordHeader.jsx";
 
 export default function FinancialRecordsTable({
   title, columns, rows, onBack, onEdit, onDelete,
-  canEdit = () => true, canDelete = () => false, renderActions, embedded = false
+  canEdit = () => true, canDelete = () => false, renderActions, embedded = false,
+  searchPlaceholder = "Search company, P.O., S.I., voucher…"
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
@@ -18,7 +19,7 @@ export default function FinancialRecordsTable({
     <section className="financial-records-card" aria-label={title}>
           <div className="financial-records-heading"><div><p>Company records</p><h2>{sectionTitle} Transactions</h2></div><span>{filteredRows.length} record(s)</span></div>
           <div className="records-toolbar">
-            <input type="search" placeholder="Search company, P.O., S.I., voucher…" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input type="search" placeholder={searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
             <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Not Paid</option></select>
           </div>
           <div className="financial-table-wrapper">

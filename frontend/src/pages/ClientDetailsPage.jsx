@@ -7,7 +7,7 @@ import ClientEditorDialog from "../components/ClientEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
-export default function ClientDetailsPage({ client, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onSaveClient, onDeleteClient }) {
+export default function ClientDetailsPage({ client, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onSaveClient, onDeleteClient, onRestoreClient, onPermanentDeleteClient }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [paymentTransaction, setPaymentTransaction] = useState(null);
@@ -16,6 +16,14 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
   const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const activeTransactions = client.transactions.filter((transaction) => !transaction.deletedAt);
+  const summaryTransactions = client.deletedAt && isAdmin ? client.transactions : activeTransactions;
+  const summary = summaryTransactions.reduce(
+    (totals, transaction) => ({
+      amount: totals.amount + Number(transaction.amount || 0),
+      balance: totals.balance + Number(transaction.balance || 0)
+    }),
+    { amount: 0, balance: 0 }
+  );
   const filteredTransactions = useMemo(() => client.transactions.filter((transaction) => {
     if (!isAdmin && transaction.deletedAt) return false;
     const effectiveStatus = transaction.deletedAt ? "Deleted" : transaction.billingStatus;
@@ -40,15 +48,27 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
 
       <main className="client-details-main">
         <PageBackButton label="Back to Client Names and Records" onClick={onBack} />
-        <div className="management-toolbar"><span>Company controls</span><div className="row-actions"><button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Client</button><button className="danger-action" type="button" onClick={async () => { const reason = window.prompt(`Reason for deleting ${client.name}:`); if (!reason?.trim()) return; const deletionMessage = isAdmin ? "This will permanently hide the client while keeping its audit history." : "The client will disappear from the User list and can be restored by an Admin."; if (!window.confirm(`Delete ${client.name}? ${deletionMessage}`)) return; try { await onDeleteClient(client.id, reason.trim()); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Client</button></div></div>
+        <div className="management-toolbar"><span>{client.deletedAt ? "Deleted company controls" : "Company controls"}</span><div className="row-actions">
+          {client.deletedAt ? <>
+            <button type="button" onClick={async () => { try { await onRestoreClient(client.id); } catch (error) { window.alert(error.message); } }}>Restore Client</button>
+            <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this client and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteClient(client.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
+          </> : <>
+            <button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Client</button>
+            <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt(`Reason for deleting ${client.name}:`); if (!reason?.trim()) return; if (!window.confirm(`Delete ${client.name} and its linked transactions? An Admin can restore them later.`)) return; try { await onDeleteClient(client.id, reason.trim()); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Client</button>
+          </>}
+        </div></div>
         <section className="client-information" aria-label={`${client.name} information`}>
           <div>
             <span>Company Name</span>
             <strong>{client.name}</strong>
           </div>
           <div>
-            <span>Payment Date</span>
-            <strong>{formatRecordDate(client.paymentDate)}</strong>
+            <span>Total Sales</span>
+            <strong>{formatCurrency(summary.amount)}</strong>
+          </div>
+          <div>
+            <span>Remaining Balance</span>
+            <strong>{formatCurrency(summary.balance)}</strong>
           </div>
           <div>
             <span>Billing Status</span>
@@ -62,7 +82,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
               <p>Client records</p>
               <h2>Transactions</h2>
             </div>
-            <div className="heading-actions"><span>{activeTransactions.length} active record(s)</span><button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button></div>
+            <div className="heading-actions"><span>{activeTransactions.length} active record(s)</span>{!client.deletedAt && <button className="primary-action" type="button" onClick={() => { setEditingTransaction(null); setEditorOpen(true); }}>+ Add Transaction</button>}</div>
           </div>
 
           <div className="detail-record-filters">
@@ -81,6 +101,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                 <option>All</option>
                 <option>Not Paid</option>
                 <option>Paid</option>
+                {isAdmin && <option>Deleted</option>}
               </select>
             </label>
           </div>
@@ -121,7 +142,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                       {!transaction.deletedAt && <button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button>}
                       {!transaction.deletedAt && Number(transaction.balance) > 0 && <button type="button" onClick={() => setPaymentTransaction(transaction)}>Receive Payment</button>}
                       {!transaction.deletedAt && <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt("Reason for deleting this client transaction:"); if (!reason?.trim()) return; if (!window.confirm("Delete this client transaction? It will be removed from the User transaction list and can be restored by an Admin.")) return; try { await onDeleteTransaction(transaction.id, reason.trim()); } catch (error) { window.alert(error.message); } }}>Delete</button>}
-                      {isAdmin && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
+                      {isAdmin && !client.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
                 )) : <tr><td className="detail-records-empty" colSpan="8">No client transactions match these filters.</td></tr>}

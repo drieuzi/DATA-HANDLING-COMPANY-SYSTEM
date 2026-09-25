@@ -61,11 +61,6 @@ export default function ExpensesChart({ monthlyExpenses }) {
                 height={totalHeight}
                 rx="4"
               />
-              {total > 0 && (
-                <text className="chart-value" x={centerX} y={Math.max(totalY - 7, 16)} textAnchor="middle">
-                  ₱{compactCurrency(total)}
-                </text>
-              )}
               <text className="chart-month" x={centerX} y="242" textAnchor="middle">
                 {item.month}
               </text>

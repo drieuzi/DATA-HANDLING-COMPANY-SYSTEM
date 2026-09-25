@@ -2,7 +2,7 @@ const express = require("express");
 const {
   createSupplier, createTransaction, deleteSupplier, deleteTransaction,
   getSupplier, getTransaction, listSuppliers, listTransactions,
-  restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
+  permanentlyDeleteSupplier, restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
 } = require("../controllers/suppliercontroller");
 const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 
@@ -17,6 +17,7 @@ router.post("/", createSupplier);
 router.patch("/:id", requireStaff, updateSupplier);
 router.delete("/:id", deleteSupplier);
 router.patch("/:id/restore", requireAdmin, restoreSupplier);
+router.delete("/:id/permanent", requireAdmin, permanentlyDeleteSupplier);
 
 router.post("/transactions", createTransaction);
 router.patch("/transactions/:id", requireStaff, updateTransaction);

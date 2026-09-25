@@ -14,7 +14,7 @@
 .voucher-table { min-width: 1000px; }
 .voucher-status { padding: 6px 9px; border-radius: 999px; font-size: .7rem; font-weight: 900; text-transform: uppercase; }
 .voucher-status--draft { background: var(--neutral); }
-.voucher-status--issued { background: var(--green-soft); color: var(--green); }
+.voucher-status--issued { background: var(--brown-status-soft); color: var(--brown-status); }
 .voucher-status--cancelled { background: var(--red-soft); color: var(--red); }
 .voucher-status--deleted { background: var(--neutral); color: var(--muted); }
 .activity-card { padding: 24px 26px; }

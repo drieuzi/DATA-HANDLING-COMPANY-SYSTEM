@@ -16,7 +16,6 @@ function createInitialFields(type, transaction) {
     ? {
         purchaseOrder: "",
         salesInvoice: "",
-        collectionReceipt: "",
         amount: "",
         attachmentName: ""
       }
@@ -81,7 +80,7 @@ export default function TransactionEditorDialog({
         id: transaction?.id,
         purchaseOrder: fields.purchaseOrder.trim(),
         salesInvoice: fields.salesInvoice.trim(),
-        collectionReceipt: fields.collectionReceipt?.trim() || (isSupplier ? "" : "—"),
+        collectionReceipt: isSupplier ? undefined : fields.collectionReceipt?.trim() || "—",
         paymentDate: fields.paymentDate || (isSupplier ? "" : "—"),
         amount,
         balance,
@@ -114,13 +113,6 @@ export default function TransactionEditorDialog({
             S.I. Number
             <input name="salesInvoice" value={fields.salesInvoice} onChange={updateField} required />
           </label>
-
-          {isSupplier && (
-            <label>
-              C.R. Number
-              <input name="collectionReceipt" value={fields.collectionReceipt} onChange={updateField} />
-            </label>
-          )}
 
           {!isSupplier && (
             <label>

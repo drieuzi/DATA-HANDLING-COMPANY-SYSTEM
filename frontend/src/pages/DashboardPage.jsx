@@ -20,6 +20,7 @@ export default function DashboardPage({
   onOpenPurchases,
   onOpenOutsideServices,
   onOpenAdmin,
+  onOpenMonitoring,
   voucherCount
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
@@ -126,12 +127,17 @@ export default function DashboardPage({
           />
         </section>
 
-        <DashboardCard
-          className="cheque-card"
-          label="Voucher Cheque"
-          value={`${dashboardData.voucherCounts?.total ?? voucherCount ?? 0} total`}
-          onClick={onOpenVouchers}
-        />
+        <section className={`dashboard-actions ${user.role === "admin" ? "has-admin-monitoring" : ""}`} aria-label="Voucher and administration">
+          <DashboardCard
+            className="cheque-card"
+            label="Voucher Cheque"
+            value={`${dashboardData.voucherCounts?.total ?? voucherCount ?? 0} total`}
+            onClick={onOpenVouchers}
+          />
+          {user.role === "admin" && (
+            <DashboardCard className="monitoring-dashboard-card" label="Admin Monitoring" onClick={onOpenMonitoring} />
+          )}
+        </section>
       </main>
 
       {notice && <div className="dashboard-notice" role="status">{notice}</div>}

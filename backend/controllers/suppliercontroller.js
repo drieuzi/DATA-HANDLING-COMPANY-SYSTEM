@@ -11,7 +11,6 @@ function mapTransaction(row) {
     paymentDate: row.payment_date || "—",
     salesInvoice: row.sales_invoice_number || "—",
     purchaseOrder: row.purchase_order_number || "—",
-    collectionReceipt: row.collection_receipt_number || "—",
     chequeDate: row.cheque_date || "—",
     amount: Number(row.amount),
     balance: Number(row.balance),
@@ -21,6 +20,7 @@ function mapTransaction(row) {
     deletedAt: row.deleted_at,
     deletionReason: row.deletion_reason,
     restoreAllowed: row.restore_allowed !== false,
+    deletedWithCompany: row.deleted_with_company === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -168,26 +168,25 @@ async function deleteSupplier(request, response, next) {
     const supplierId = validate.id(request.params.id, "Supplier ID");
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await client.query("BEGIN");
-    const linked = await client.query(
-      `SELECT COUNT(*)::INTEGER AS count FROM supplier_transactions
-       WHERE supplier_id = $1 AND deleted_at IS NULL`,
-      [supplierId]
-    );
-    if (linked.rows[0].count > 0) {
-      throw new HttpError(409, "Delete or archive the supplier's transactions before deleting the supplier.");
-    }
     const result = await client.query(
       `UPDATE suppliers SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, is_active = FALSE, restore_allowed = $3
-       WHERE id = $4 AND deleted_at IS NULL RETURNING id, name`,
-      [request.user.id, reason, request.user.role !== "admin", supplierId]
+         deletion_reason = $2, is_active = FALSE, restore_allowed = TRUE
+       WHERE id = $3 AND deleted_at IS NULL RETURNING id, name`,
+      [request.user.id, reason, supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Supplier not found.");
+    const linked = await client.query(
+      `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
+         deletion_reason = $2, restore_allowed = TRUE, deleted_with_company = TRUE
+       WHERE supplier_id = $3 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, supplierId]
+    );
     await writeAudit(client, request, "SUPPLIER_DELETED", "supplier", supplierId, {
-      reason, name: result.rows[0].name, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+      reason, name: result.rows[0].name, deletionMode: "restorable",
+      linkedTransactionsDeleted: linked.rowCount
     });
     await client.query("COMMIT");
-    response.json({ message: request.user.role === "admin" ? "Supplier permanently hidden. Audit history was kept." : "Supplier moved to deleted records." });
+    response.json({ message: `Supplier and ${linked.rowCount} linked transaction(s) moved to deleted records.` });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -206,9 +205,47 @@ async function restoreSupplier(request, response, next) {
       [supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted supplier not found.");
-    await writeAudit(client, request, "SUPPLIER_RESTORED", "supplier", supplierId, { name: result.rows[0].name });
+    const linked = await client.query(
+      `UPDATE supplier_transactions SET deleted_at = NULL, deleted_by = NULL,
+         deletion_reason = NULL, restore_allowed = TRUE, deleted_with_company = FALSE
+       WHERE supplier_id = $1 AND deleted_with_company = TRUE AND restore_allowed = TRUE
+       RETURNING id`,
+      [supplierId]
+    );
+    await writeAudit(client, request, "SUPPLIER_RESTORED", "supplier", supplierId, {
+      name: result.rows[0].name, linkedTransactionsRestored: linked.rowCount
+    });
     await client.query("COMMIT");
     response.json({ supplier: mapSupplier(result.rows[0]), message: "Supplier restored." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteSupplier(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const supplierId = validate.id(request.params.id, "Supplier ID");
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE suppliers SET restore_allowed = FALSE
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING id, name`,
+      [supplierId]
+    );
+    if (!result.rows[0]) throw new HttpError(404, "Restorable deleted supplier not found.");
+    const linked = await client.query(
+      `UPDATE supplier_transactions SET restore_allowed = FALSE, deleted_with_company = FALSE
+       WHERE supplier_id = $1 RETURNING id`,
+      [supplierId]
+    );
+    await writeAudit(client, request, "SUPPLIER_PERMANENTLY_DELETED", "supplier", supplierId, {
+      name: result.rows[0].name, linkedTransactionsMadeUnrestorable: linked.rowCount,
+      deletionMode: "unrestorable"
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Supplier and its linked records are now permanently unrestorable. Audit history was kept." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -221,12 +258,11 @@ function transactionValues(body) {
     paymentDate: validate.date(body.paymentDate, "Payment date"),
     salesInvoice: validate.text(body.salesInvoice, "Sales invoice number", { max: 80 }),
     purchaseOrder: validate.text(body.purchaseOrder, "Purchase order number", { max: 80 }),
-    collectionReceipt: validate.text(body.collectionReceipt, "Collection receipt number", { max: 80 }),
     chequeDate: validate.date(body.chequeDate, "Cheque date"),
     amount: validate.money(body.amount, "Amount")
   };
-  if (!values.salesInvoice && !values.purchaseOrder) {
-    throw new HttpError(400, "Enter a sales invoice number or purchase order number.");
+  if (!values.salesInvoice || !values.purchaseOrder) {
+    throw new HttpError(400, "Sales invoice number and purchase order number are required.");
   }
   return values;
 }
@@ -245,9 +281,8 @@ async function createTransaction(request, response, next) {
     const result = await client.query(
       `INSERT INTO supplier_transactions (
          supplier_id, voucher_date, payment_date, sales_invoice_number,
-         purchase_order_number, collection_receipt_number, cheque_date,
-         amount, balance, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
+         purchase_order_number, cheque_date, amount, balance, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
        RETURNING *`,
       [supplierId, ...Object.values(values), request.user.id]
     );
@@ -278,9 +313,9 @@ async function updateTransaction(request, response, next) {
     const result = await client.query(
       `UPDATE supplier_transactions SET
          voucher_date = $1, payment_date = $2, sales_invoice_number = $3,
-         purchase_order_number = $4, collection_receipt_number = $5,
-         cheque_date = $6, amount = $7, balance = $7 - $8
-       WHERE id = $9 AND deleted_at IS NULL
+         purchase_order_number = $4, cheque_date = $5,
+         amount = $6, balance = $6 - $7
+       WHERE id = $8 AND deleted_at IS NULL
        RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]
     );
@@ -310,7 +345,7 @@ async function deleteTransaction(request, response, next) {
     }
     const result = await client.query(
       `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, restore_allowed = $3
+         deletion_reason = $2, restore_allowed = $3, deleted_with_company = FALSE
        WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
       [request.user.id, reason, request.user.role !== "admin", transactionId]
     );
@@ -333,7 +368,7 @@ async function restoreTransaction(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE supplier_transactions st SET deleted_at = NULL, deleted_by = NULL,
-         deletion_reason = NULL, restore_allowed = TRUE
+         deletion_reason = NULL, restore_allowed = TRUE, deleted_with_company = FALSE
        FROM suppliers s
        WHERE st.id = $1 AND st.supplier_id = s.id
          AND st.deleted_at IS NOT NULL AND st.restore_allowed = TRUE AND s.deleted_at IS NULL
@@ -383,5 +418,5 @@ async function getTransaction(request, response, next) {
 module.exports = {
   createSupplier, createTransaction, deleteSupplier, deleteTransaction,
   getSupplier, getTransaction, listSuppliers, listTransactions,
-  restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
+  permanentlyDeleteSupplier, restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
 };

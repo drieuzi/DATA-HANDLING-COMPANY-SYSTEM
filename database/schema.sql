@@ -75,9 +75,8 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
         REFERENCES suppliers(id) ON DELETE RESTRICT,
     voucher_date DATE,
     payment_date DATE,
-    sales_invoice_number VARCHAR(80),
-    purchase_order_number VARCHAR(80),
-    collection_receipt_number VARCHAR(80),
+    sales_invoice_number VARCHAR(80) NOT NULL,
+    purchase_order_number VARCHAR(80) NOT NULL,
     cheque_date DATE,
     amount NUMERIC(14, 2) NOT NULL,
     balance NUMERIC(14, 2) NOT NULL,
@@ -92,6 +91,7 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
     restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT supplier_transactions_positive_amount
@@ -294,6 +294,7 @@ CREATE TABLE IF NOT EXISTS client_transactions (
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
     restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT client_transactions_positive_amount CHECK (amount > 0),
@@ -419,7 +420,8 @@ ALTER TABLE supplier_transactions
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
-    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS cheque_number VARCHAR(80),
@@ -448,7 +450,8 @@ ALTER TABLE clients
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE client_transactions
-    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Older installations generated a third "Partially Paid" state. Drop the
 -- dependent views/indexes once and replace that expression with two states.
@@ -554,7 +557,6 @@ SELECT
     st.payment_date,
     st.sales_invoice_number,
     st.purchase_order_number,
-    st.collection_receipt_number,
     st.cheque_date,
     st.amount,
     st.balance,
@@ -569,7 +571,7 @@ WHERE st.balance > 0
   AND st.deleted_at IS NULL
   AND supplier.deleted_at IS NULL;
 
--- Receivables are calculated from active client transactions with a balance.
+-- Receivables preserve all active client transactions, including paid records.
 CREATE OR REPLACE VIEW receivable_records AS
 SELECT
     ct.id AS transaction_id,
@@ -579,7 +581,6 @@ SELECT
     client.business_address,
     ct.transaction_date,
     ct.sales_invoice_number,
-    ct.purchase_order_number,
     ct.collection_receipt_number,
     ct.payment_date,
     ct.cheque_date,
@@ -592,8 +593,7 @@ SELECT
     ct.updated_at
 FROM client_transactions AS ct
 JOIN clients AS client ON client.id = ct.client_id
-WHERE ct.balance > 0
-  AND ct.deleted_at IS NULL
+WHERE ct.deleted_at IS NULL
   AND client.deleted_at IS NULL;
 
 -- Keeps updated_at correct without depending on every API route to remember it.
@@ -655,7 +655,7 @@ COMMENT ON TABLE payments IS
 COMMENT ON TABLE clients IS
     'Client master records with recoverable deletion.';
 COMMENT ON TABLE client_transactions IS
-    'Sales transactions. Receivables are rows whose balance is greater than zero.';
+    'Sales transactions shown in Receivables whether paid or unpaid.';
 COMMENT ON TABLE client_payments IS
     'Client payment history that reduces client transaction balances.';
 COMMENT ON TABLE outside_services IS
@@ -665,4 +665,4 @@ COMMENT ON TABLE audit_logs IS
 COMMENT ON VIEW payable_records IS
     'Live unpaid/partially-paid supplier transactions; contains no duplicated payable data.';
 COMMENT ON VIEW receivable_records IS
-    'Live unpaid/partially-paid client transactions; contains no duplicated receivable data.';
+    'Live active client transactions, including paid records; contains no duplicated receivable data.';
