@@ -1,4 +1,12 @@
 const pool = require("../config/db");
+const { writeAudit } = require("../services/auditservice");
+const HttpError = require("../utils/httpError");
+const validate = require("../utils/validation");
+
+const REPORT_TYPES = new Set(["sales", "purchases", "other_expenses"]);
+const REPORT_FORMATS = new Set(["pdf"]);
+const REPORT_TEMPLATES = new Set(["bir", "office"]);
+const REPORT_STATUSES = new Set(["All", "Paid", "Not Paid"]);
 
 async function listAuditLogs(request, response, next) {
   try {
@@ -22,4 +30,33 @@ async function listAuditLogs(request, response, next) {
   } catch (error) { next(error); }
 }
 
-module.exports = { listAuditLogs };
+async function recordReportExport(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const reportType = validate.text(request.body.reportType, "Report type", { required: true, max: 40 });
+    const format = validate.text(request.body.format, "Export format", { required: true, max: 10 }).toLowerCase();
+    const template = validate.text(request.body.template, "Report template", { required: true, max: 10 }).toLowerCase();
+    const filterStatus = validate.text(request.body.filterStatus, "Billing status", { required: true, max: 20 });
+    const from = validate.date(request.body.from, "From date");
+    const to = validate.date(request.body.to, "To date");
+    const recordCount = Number(request.body.recordCount);
+    if (!REPORT_TYPES.has(reportType)) throw new HttpError(400, "Unsupported report type.");
+    if (!REPORT_FORMATS.has(format)) throw new HttpError(400, "Unsupported report format.");
+    if (!REPORT_TEMPLATES.has(template)) throw new HttpError(400, "Unsupported report template.");
+    if (!REPORT_STATUSES.has(filterStatus)) throw new HttpError(400, "Unsupported billing status filter.");
+    if (from && to && from > to) throw new HttpError(400, "From date must not be later than To date.");
+    if (!Number.isInteger(recordCount) || recordCount < 0) throw new HttpError(400, "Invalid report record count.");
+
+    await client.query("BEGIN");
+    await writeAudit(client, request, "REPORT_EXPORTED", "report", null, {
+      reportType, format, template, filterStatus, from, to, recordCount
+    });
+    await client.query("COMMIT");
+    response.status(201).json({ message: "Report export recorded." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+module.exports = { listAuditLogs, recordReportExport };

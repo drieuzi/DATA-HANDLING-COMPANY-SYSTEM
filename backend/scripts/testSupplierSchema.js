@@ -30,8 +30,8 @@ async function runTest() {
     const userId = userResult.rows[0].id;
 
     const supplierResult = await client.query(
-      `INSERT INTO suppliers (supplier_code, name, created_by)
-       VALUES ($1, $2, $3)
+      `INSERT INTO suppliers (supplier_code, name, business_address, created_by)
+       VALUES ($1, $2, 'Test business address', $3)
        RETURNING id`,
       [`TEST-${suffix}`, `Schema Test Supplier ${suffix}`, userId]
     );
@@ -39,10 +39,11 @@ async function runTest() {
 
     const transactionResult = await client.query(
       `INSERT INTO supplier_transactions (
-         supplier_id, purchase_order_number, amount, balance, created_by
-       ) VALUES ($1, $2, 10000.00, 10000.00, $3)
+         supplier_id, purchase_order_number, sales_invoice_number, tin_number,
+         amount, balance, created_by
+       ) VALUES ($1, $2, $3, '123-456-789-000', 10000.00, 10000.00, $4)
        RETURNING id, amount, balance, billing_status`,
-      [supplierId, `PO-TEST-${suffix}`, userId]
+      [supplierId, `PO-TEST-${suffix}`, `SI-TEST-${suffix}`, userId]
     );
     const transactionId = transactionResult.rows[0].id;
     assert.equal(transactionResult.rows[0].billing_status, "Not Paid");

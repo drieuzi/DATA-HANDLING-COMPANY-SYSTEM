@@ -14,15 +14,15 @@ async function runTest() {
       [`client_test_${suffix}`]
     );
     const clientRecord = await client.query(
-      `INSERT INTO clients (client_code, name, created_by)
-       VALUES ($1, $2, $3) RETURNING id`,
+      `INSERT INTO clients (client_code, name, business_address, created_by)
+       VALUES ($1, $2, 'Test business address', $3) RETURNING id`,
       [`CT-${suffix}`, `Client Test ${suffix}`, user.rows[0].id]
     );
     const transaction = await client.query(
       `INSERT INTO client_transactions (
          client_id, transaction_date, purchase_order_number,
-         sales_invoice_number, amount, balance, created_by
-       ) VALUES ($1, CURRENT_DATE, $2, $3, 10000.00, 10000.00, $4)
+         sales_invoice_number, tin_number, amount, balance, created_by
+       ) VALUES ($1, CURRENT_DATE, $2, $3, '123-456-789-000', 10000.00, 10000.00, $4)
        RETURNING id, balance, billing_status`,
       [clientRecord.rows[0].id, `PO-${suffix}`, `SI-${suffix}`, user.rows[0].id]
     );

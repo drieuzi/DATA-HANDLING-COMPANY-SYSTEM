@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const emptyClient = {
-  name: "", contactPerson: "", contactNumber: "", isActive: true
+  name: "", businessAddress: "", contactPerson: "", contactNumber: "", isActive: true
 };
 
 export default function ClientEditorDialog({ isOpen, client, onSave, onClose }) {
@@ -25,10 +25,11 @@ export default function ClientEditorDialog({ isOpen, client, onSave, onClose }) 
   async function submit(event) {
     event.preventDefault();
     if (fields.name.trim().length < 2) return setMessage("Enter the client name.");
+    if (!fields.businessAddress.trim()) return setMessage("Enter the client business address.");
     setSaving(true);
     setMessage("");
     try {
-      await onSave({ ...fields, name: fields.name.trim() });
+      await onSave({ ...fields, name: fields.name.trim(), businessAddress: fields.businessAddress.trim() });
       onClose();
     } catch (error) { setMessage(error.message); }
     finally { setSaving(false); }
@@ -40,6 +41,7 @@ export default function ClientEditorDialog({ isOpen, client, onSave, onClose }) 
       <div className="record-dialog__header"><div><p>{client ? "Edit client" : "New client"}</p><h2>Client Information</h2></div><button type="button" onClick={onClose} aria-label="Close client form">×</button></div>
       <form className="record-form" onSubmit={submit}>
         <label className="record-form__wide">Company Name<input name="name" value={fields.name} onChange={change} required /></label>
+        <label className="record-form__wide">Business Address<textarea name="businessAddress" value={fields.businessAddress} onChange={change} rows="3" required /></label>
         <label>Contact Person<input name="contactPerson" value={fields.contactPerson} onChange={change} /></label>
         <label>Contact Number<input name="contactNumber" value={fields.contactNumber} onChange={change} /></label>
         <p className="record-form__message record-form__wide" role="alert">{message}</p>

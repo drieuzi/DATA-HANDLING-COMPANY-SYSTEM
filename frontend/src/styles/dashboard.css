@@ -282,6 +282,7 @@
 
 .summary-card,
 .monitoring-dashboard-card,
+.report-dashboard-card,
 .cheque-card {
   min-height: 78px;
   background: var(--peach-strong);
@@ -296,8 +297,13 @@
   align-self: center;
 }
 
-.dashboard-actions.has-admin-monitoring {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.dashboard-actions.has-admin-tools {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-actions.has-admin-tools .dashboard-card {
+  padding-inline: 8px;
+  font-size: clamp(0.75rem, 1.25vw, 1rem);
 }
 
 .cheque-card {
@@ -371,5 +377,9 @@
 
   .totals-card {
     border-radius: 30px;
+  }
+
+  .dashboard-actions.has-admin-tools {
+    grid-template-columns: 1fr;
   }
 }

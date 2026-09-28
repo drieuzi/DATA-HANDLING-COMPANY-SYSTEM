@@ -11,6 +11,7 @@ function mapTransaction(row) {
     paymentDate: row.payment_date || "—",
     salesInvoice: row.sales_invoice_number || "—",
     purchaseOrder: row.purchase_order_number || "—",
+    tinNumber: row.tin_number || "—",
     chequeDate: row.cheque_date || "—",
     amount: Number(row.amount),
     balance: Number(row.balance),
@@ -107,7 +108,7 @@ async function createSupplier(request, response, next) {
     const values = {
       supplierCode: validate.text(request.body.supplierCode, "Supplier code", { max: 40 }),
       name: validate.text(request.body.name, "Supplier name", { required: true, max: 160 }),
-      businessAddress: validate.text(request.body.businessAddress, "Business address", { max: 1000 }),
+      businessAddress: validate.text(request.body.businessAddress, "Business address", { required: true, max: 1000 }),
       contactPerson: validate.text(request.body.contactPerson, "Contact person", { max: 120 }),
       contactNumber: validate.text(request.body.contactNumber, "Contact number", { max: 40 }),
       email: validate.text(request.body.email, "Email", { max: 160 })
@@ -137,7 +138,7 @@ async function updateSupplier(request, response, next) {
     const values = {
       supplierCode: validate.text(request.body.supplierCode, "Supplier code", { max: 40 }),
       name: validate.text(request.body.name, "Supplier name", { required: true, max: 160 }),
-      businessAddress: validate.text(request.body.businessAddress, "Business address", { max: 1000 }),
+      businessAddress: validate.text(request.body.businessAddress, "Business address", { required: true, max: 1000 }),
       contactPerson: validate.text(request.body.contactPerson, "Contact person", { max: 120 }),
       contactNumber: validate.text(request.body.contactNumber, "Contact number", { max: 40 }),
       email: validate.text(request.body.email, "Email", { max: 160 }),
@@ -259,7 +260,8 @@ function transactionValues(body) {
     salesInvoice: validate.text(body.salesInvoice, "Sales invoice number", { max: 80 }),
     purchaseOrder: validate.text(body.purchaseOrder, "Purchase order number", { max: 80 }),
     chequeDate: validate.date(body.chequeDate, "Cheque date"),
-    amount: validate.money(body.amount, "Amount")
+    amount: validate.money(body.amount, "Amount"),
+    tinNumber: validate.text(body.tinNumber, "TIN number", { required: true, max: 40 })
   };
   if (!values.salesInvoice || !values.purchaseOrder) {
     throw new HttpError(400, "Sales invoice number and purchase order number are required.");
@@ -281,8 +283,8 @@ async function createTransaction(request, response, next) {
     const result = await client.query(
       `INSERT INTO supplier_transactions (
          supplier_id, voucher_date, payment_date, sales_invoice_number,
-         purchase_order_number, cheque_date, amount, balance, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
+         purchase_order_number, cheque_date, amount, tin_number, balance, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $9)
        RETURNING *`,
       [supplierId, ...Object.values(values), request.user.id]
     );
@@ -314,8 +316,8 @@ async function updateTransaction(request, response, next) {
       `UPDATE supplier_transactions SET
          voucher_date = $1, payment_date = $2, sales_invoice_number = $3,
          purchase_order_number = $4, cheque_date = $5,
-         amount = $6, balance = $6 - $7
-       WHERE id = $8 AND deleted_at IS NULL
+         amount = $6, tin_number = $7, balance = $6 - $8
+       WHERE id = $9 AND deleted_at IS NULL
        RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]
     );

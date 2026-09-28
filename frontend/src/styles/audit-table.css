@@ -42,12 +42,19 @@
   margin-top: 5px;
 }
 
+.admin-monitoring-filters {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.5fr) minmax(210px, 1fr);
+  gap: 12px;
+  width: min(650px, 100%);
+}
+
 .admin-monitoring-toolbar label {
   display: grid;
-  width: min(330px, 100%);
   gap: 7px;
 }
 
+.admin-monitoring-toolbar input,
 .admin-monitoring-toolbar select {
   width: 100%;
   padding: 12px 14px;
@@ -154,5 +161,9 @@
   .recent-audit-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .admin-monitoring-filters {
+    grid-template-columns: 1fr;
   }
 }

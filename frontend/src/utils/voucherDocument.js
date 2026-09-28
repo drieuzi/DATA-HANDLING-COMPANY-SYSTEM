@@ -111,25 +111,25 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
     body { margin: 0; background: #f5f5f5; color: #111; font-family: Arial, Helvetica, sans-serif; }
     .screen-actions { display: flex; justify-content: center; gap: 12px; padding: 14px; }
     .screen-actions button { padding: 10px 20px; border: 2px solid #111; border-radius: 999px; background: #111; color: #fff; font: 700 14px Arial; cursor: pointer; }
-    .voucher { width: 277mm; min-height: 185mm; margin: 0 auto 20px; padding: 16mm 18mm 12mm; background: #ff9a0a; }
+    .voucher { width: 277mm; min-height: 185mm; margin: 0 auto 20px; padding: 16mm 18mm 12mm; background: #fff; }
     .brand { text-align: center; }
     .company-name { margin: 0; font-size: 32px; font-weight: 900; letter-spacing: .24em; text-transform: uppercase; }
     .brand-subtitle { margin: 4px 0 7px; font-size: 11px; letter-spacing: .45em; }
     .address { margin: 0 0 18px; font-size: 10px; letter-spacing: .24em; }
     .voucher-meta { display: grid; grid-template-columns: 1.25fr .75fr; gap: 30px; margin: 0 10mm 11px; font-size: 12px; }
     .field-line { display: grid; grid-template-columns: max-content 1fr; gap: 8px; margin: 4px 0; align-items: end; }
-    .line-value { min-height: 18px; padding: 0 4px 3px; border-bottom: 2px solid #111; font-weight: 700; }
-    .voucher-body { border: 2px solid #111; }
+    .line-value { min-height: 18px; padding: 0 4px 3px; border-bottom: 1px solid #111; font-weight: 700; }
+    .voucher-body { border: 1px solid #111; }
     .top-grid { display: grid; grid-template-columns: 1fr 1fr; }
-    .top-grid > div { min-height: 34px; padding: 8px 12px; border-bottom: 2px solid #111; }
-    .top-grid > div:nth-child(odd) { border-right: 2px solid #111; }
+    .top-grid > div { min-height: 34px; padding: 8px 12px; border-bottom: 1px solid #111; }
+    .top-grid > div:nth-child(odd) { border-right: 1px solid #111; }
     .amount-value { text-align: center; font-weight: 700; }
     .payment-for { text-align: center; }
     .body-grid { display: grid; grid-template-columns: 1.08fr 1fr; min-height: 92mm; }
-    .distribution { border-right: 2px solid #111; }
+    .distribution { border-right: 1px solid #111; }
     .section-title { margin: 0; padding: 10px 12px; font-size: 12px; letter-spacing: .12em; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { height: 29px; padding: 6px 9px; border: 2px solid #111; border-left: 0; font-size: 11px; text-align: left; }
+    th, td { height: 29px; padding: 6px 9px; border: 1px solid #111; border-left: 0; font-size: 11px; text-align: left; }
     th:last-child, td:last-child { border-right: 0; }
     th { font-weight: 700; text-align: center; }
     .numeric { text-align: right; }
@@ -140,9 +140,9 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
     .received { margin-top: auto; }
     .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28mm; padding-top: 12px; }
     .signature { min-height: 48px; font-size: 11px; }
-    .signature-name { min-height: 24px; margin-top: 4px; padding: 5px 3px 2px; border-bottom: 2px solid #111; font-weight: 700; }
+    .signature-name { min-height: 24px; margin-top: 4px; padding: 5px 3px 2px; border-bottom: 1px solid #111; font-weight: 700; }
     @media print {
-      body { background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      body, .voucher { background: #fff; }
       .screen-actions { display: none; }
       .voucher { margin: 0; }
     }

@@ -128,6 +128,16 @@
   text-overflow: ellipsis;
 }
 
+.client-information .company-address-card {
+  grid-column: 1 / -1;
+  min-height: 84px;
+}
+
+.client-information .company-address-card strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .client-records {
   overflow: hidden;
   border-radius: 28px;

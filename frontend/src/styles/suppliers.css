@@ -170,6 +170,16 @@
   text-overflow: ellipsis;
 }
 
+.supplier-summary .company-address-card {
+  grid-column: 1 / -1;
+  min-height: 84px;
+}
+
+.supplier-summary .company-address-card strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .supplier-transactions {
   overflow: hidden;
   border-radius: 28px;

@@ -6,4 +6,5 @@ coverage/
 .env.local
 !.env.example
 *.log
+backend/uploads/
 .DS_Store

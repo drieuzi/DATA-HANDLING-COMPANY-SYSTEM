@@ -11,6 +11,7 @@ import TotalPurchasesPage from "./pages/TotalPurchasesPage.jsx";
 import OutsideServicesPage from "./pages/OutsideServicesPage.jsx";
 import AdminUsersPage from "./pages/AdminUsersPage.jsx";
 import AdminMonitoringPage from "./pages/AdminMonitoringPage.jsx";
+import ReportExportPage from "./pages/ReportExportPage.jsx";
 import { getCurrentUser, logout, USE_DEMO_DATA } from "./services/authApi.js";
 import {
   createSupplier, createSupplierTransaction, deleteSupplier, deleteSupplierTransaction,
@@ -24,14 +25,16 @@ import {
   restoreVoucher as restoreVoucherRequest,
   updateVoucher as updateVoucherRequest
 } from "./services/voucherApi.js";
-import { listAuditLogs } from "./services/auditApi.js";
+import { listAuditLogs, recordReportExport } from "./services/auditApi.js";
 import {
   createClient, createClientTransaction, deleteClient, deleteClientTransaction,
   listClients, permanentlyDeleteClient, recordClientPayment, restoreClient, restoreClientTransaction,
   updateClient, updateClientTransaction
 } from "./services/clientApi.js";
 import {
-  createOutsideService, deleteOutsideService, listOutsideServices, updateOutsideService
+  createOutsideService, deleteOutsideService, downloadOutsideServiceAttachment, listOutsideServices,
+  removeOutsideServiceAttachment, replaceOutsideServiceAttachment, updateOutsideService,
+  viewOutsideServiceAttachment
 } from "./services/outsideServiceApi.js";
 import { demoSuppliers } from "./data/demoSuppliers.js";
 import { demoClients } from "./data/demoClients.js";
@@ -382,28 +385,88 @@ export default function App() {
 
   async function saveOutsideService(serviceId, values) {
     if (USE_DEMO_DATA) {
+      const { attachment, ...recordValues } = values;
+      const attachmentValues = attachment ? {
+        attachmentName: attachment.name,
+        attachmentMimeType: attachment.type,
+        attachmentSize: attachment.size,
+        attachmentObjectUrl: URL.createObjectURL(attachment),
+        hasAttachment: true
+      } : {};
       if (serviceId) {
         setOutsideServices((current) => current.map((item) => item.id === serviceId
-          ? { ...item, ...values, amount: Number(values.amount), updatedAt: new Date().toISOString() }
+          ? { ...item, ...recordValues, ...attachmentValues, amount: Number(values.amount), updatedAt: new Date().toISOString() }
           : item));
-        addLocalAudit("OUTSIDE_SERVICE_UPDATED", values, "outside_service", serviceId);
+        addLocalAudit("OUTSIDE_SERVICE_UPDATED", recordValues, "outside_service", serviceId);
       } else {
         const created = {
-          ...values,
+          ...recordValues,
+          ...attachmentValues,
           id: createRecordId("outside-service"),
           amount: Number(values.amount),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         setOutsideServices((current) => [created, ...current]);
-        addLocalAudit("OUTSIDE_SERVICE_CREATED", values, "outside_service", created.id);
+        addLocalAudit("OUTSIDE_SERVICE_CREATED", recordValues, "outside_service", created.id);
       }
     } else {
       if (serviceId) await updateOutsideService(serviceId, values);
       else await createOutsideService(values);
       await refreshBackendData();
     }
-    setAppMessage(serviceId ? "Outside service updated." : "Outside service added to monthly expenses.");
+    setAppMessage(serviceId ? "Other expense updated." : "Other expense added to monthly expenses.");
+  }
+
+  async function replaceOutsideServiceFile(serviceId, attachment) {
+    if (USE_DEMO_DATA) {
+      setOutsideServices((current) => current.map((item) => item.id === serviceId ? {
+        ...item,
+        attachmentName: attachment.name,
+        attachmentMimeType: attachment.type,
+        attachmentSize: attachment.size,
+        attachmentObjectUrl: URL.createObjectURL(attachment),
+        hasAttachment: true
+      } : item));
+    } else {
+      await replaceOutsideServiceAttachment(serviceId, attachment);
+      await refreshBackendData();
+    }
+  }
+
+  async function removeOutsideServiceFile(serviceId) {
+    if (USE_DEMO_DATA) {
+      setOutsideServices((current) => current.map((item) => item.id === serviceId ? {
+        ...item,
+        attachmentName: null,
+        attachmentMimeType: null,
+        attachmentSize: null,
+        attachmentObjectUrl: null,
+        hasAttachment: false
+      } : item));
+    } else {
+      await removeOutsideServiceAttachment(serviceId);
+      await refreshBackendData();
+    }
+  }
+
+  function viewOutsideServiceFile(serviceId) {
+    if (!USE_DEMO_DATA) return viewOutsideServiceAttachment(serviceId);
+    const record = outsideServices.find((item) => item.id === serviceId);
+    if (record?.attachmentObjectUrl) window.open(record.attachmentObjectUrl, "_blank", "noopener,noreferrer");
+    return Promise.resolve();
+  }
+
+  function downloadOutsideServiceFile(serviceId, filename) {
+    if (!USE_DEMO_DATA) return downloadOutsideServiceAttachment(serviceId, filename);
+    const record = outsideServices.find((item) => item.id === serviceId);
+    if (record?.attachmentObjectUrl) {
+      const link = document.createElement("a");
+      link.href = record.attachmentObjectUrl;
+      link.download = filename || "outside-service-attachment";
+      link.click();
+    }
+    return Promise.resolve();
   }
 
   async function removeOutsideService(serviceId) {
@@ -415,7 +478,16 @@ export default function App() {
       await deleteOutsideService(serviceId);
       await refreshBackendData();
     }
-    setAppMessage("Outside service deleted and removed from monthly analytics.");
+    setAppMessage("Other expense deleted and removed from monthly analytics.");
+  }
+
+  async function recordExport(details) {
+    if (USE_DEMO_DATA) {
+      addLocalAudit("REPORT_EXPORTED", details, "report");
+      return;
+    }
+    await recordReportExport(details);
+    if (user?.role === "admin") setAuditLog(await listAuditLogs(500));
   }
 
   if (authLoading) return <div className="auth-loading" role="status">Loading Illuminux system…</div>;
@@ -426,6 +498,8 @@ export default function App() {
     page = <AdminUsersPage currentUser={user} onBack={() => setCurrentPage("dashboard")} onLogout={handleLogout} />;
   } else if (currentPage === "admin-monitoring" && user.role === "admin") {
     page = <AdminMonitoringPage user={user} auditLog={auditLog} suppliers={suppliers} clients={clients} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} onLogout={handleLogout} onRestoreSupplier={recoverSupplier} onPermanentDeleteSupplier={permanentlyRemoveSupplier} onRestoreSupplierTransaction={recoverSupplierTransaction} onRestoreClient={recoverClient} onPermanentDeleteClient={permanentlyRemoveClient} onRestoreClientTransaction={recoverClientTransaction} onRestoreVoucher={recoverVoucher} onPermanentDeleteVoucher={permanentlyRemoveVoucher} />;
+  } else if (currentPage === "file-report" && user.role === "admin") {
+    page = <ReportExportPage user={user} clients={clients} suppliers={suppliers} outsideServices={outsideServices} onBack={() => setCurrentPage("dashboard")} onLogout={handleLogout} onRecordExport={recordExport} />;
   } else if (currentPage === "suppliers") {
     page = <SuppliersPage suppliers={suppliers} user={user} onBack={() => setCurrentPage("dashboard")} onSelectSupplier={(item) => { setSelectedSupplierId(item.id); setCurrentPage("supplier-details"); }} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} onRestoreSupplier={recoverSupplier} onPermanentDeleteSupplier={permanentlyRemoveSupplier} activeTab={supplierSectionTab} onTabChange={setSupplierSectionTab} />;
   } else if (currentPage === "clients") {
@@ -437,13 +511,13 @@ export default function App() {
   } else if (currentPage === "total-purchases") {
     page = <TotalPurchasesPage suppliers={suppliers} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} />;
   } else if (currentPage === "outside-services") {
-    page = <OutsideServicesPage user={user} services={outsideServices} onBack={() => setCurrentPage("dashboard")} onSave={saveOutsideService} onDelete={removeOutsideService} />;
+    page = <OutsideServicesPage user={user} services={outsideServices} onBack={() => setCurrentPage("dashboard")} onSave={saveOutsideService} onDelete={removeOutsideService} onViewAttachment={viewOutsideServiceFile} onDownloadAttachment={downloadOutsideServiceFile} onReplaceAttachment={replaceOutsideServiceFile} onRemoveAttachment={removeOutsideServiceFile} onRecordExport={recordExport} />;
   } else if (currentPage === "supplier-details" && selectedSupplier) {
     page = <SupplierDetailsPage supplier={selectedSupplier} user={user} onBack={() => setCurrentPage("suppliers")} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onRestoreTransaction={recoverSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} onRestoreSupplier={recoverSupplier} onPermanentDeleteSupplier={permanentlyRemoveSupplier} />;
   } else if (currentPage === "client-details" && selectedClient) {
     page = <ClientDetailsPage client={selectedClient} user={user} onBack={() => setCurrentPage("clients")} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onRestoreTransaction={recoverClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} onPermanentDeleteClient={permanentlyRemoveClient} />;
   } else {
-    page = <DashboardPage user={user} onLogout={handleLogout} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenOutsideServices={() => setCurrentPage("outside-services")} onOpenAdmin={() => setCurrentPage("admin-users")} onOpenMonitoring={() => setCurrentPage("admin-monitoring")} />;
+    page = <DashboardPage user={user} onLogout={handleLogout} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenOutsideServices={() => setCurrentPage("outside-services")} onOpenAdmin={() => setCurrentPage("admin-users")} onOpenMonitoring={() => setCurrentPage("admin-monitoring")} onOpenReports={() => setCurrentPage("file-report")} />;
   }
 
   return <>{dataLoading && <div className="app-data-loading" role="status">Refreshing records…</div>}{appMessage && <div className="dashboard-notice" role="status">{appMessage}</div>}{page}</>;

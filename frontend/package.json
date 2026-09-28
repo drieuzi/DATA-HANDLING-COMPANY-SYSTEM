@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "read-excel-file": "^9.3.10"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.1.1",

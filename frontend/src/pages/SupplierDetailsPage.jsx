@@ -31,6 +31,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
       transaction.voucherNumber,
       transaction.salesInvoice,
       transaction.purchaseOrder,
+      transaction.tinNumber,
       transaction.voucherDate,
       transaction.amount,
       transaction.balance,
@@ -57,6 +58,10 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
           </>}
         </div></div>
         <section className="supplier-summary" aria-label={`${supplier.name} summary`}>
+          <div className="company-address-card">
+            <span>Business Address</span>
+            <strong>{supplier.businessAddress || "—"}</strong>
+          </div>
           <div>
             <span>Supplier</span>
             <strong>{supplier.name}</strong>
@@ -89,7 +94,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
               <span>Search transactions</span>
               <input
                 type="search"
-                placeholder="Search voucher, P.O., or S.I."
+                placeholder="Search voucher, P.O., S.I., or TIN"
                 value={transactionSearch}
                 onChange={(event) => setTransactionSearch(event.target.value)}
               />
@@ -113,6 +118,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                   <th>Voucher Date</th>
                   <th>S.I. #</th>
                   <th>P.O. #</th>
+                  <th>TIN #</th>
                   <th>Amount</th>
                   <th>Balance</th>
                   <th>Billing Status</th>
@@ -126,6 +132,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                     <td>{formatRecordDate(transaction.voucherDate)}</td>
                     <td>{transaction.salesInvoice}</td>
                     <td>{transaction.purchaseOrder}</td>
+                    <td>{transaction.tinNumber || "—"}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
                     <td>{formatCurrency(transaction.balance)}</td>
                     <td>
@@ -143,7 +150,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                       {isAdmin && !supplier.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                )) : <tr><td className="detail-records-empty" colSpan="8">No supplier transactions match these filters.</td></tr>}
+                )) : <tr><td className="detail-records-empty" colSpan="9">No supplier transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>

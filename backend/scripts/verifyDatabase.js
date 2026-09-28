@@ -71,6 +71,40 @@ async function verifyDatabase() {
     [["suppliers", "supplier_transactions", "clients", "client_transactions", "vouchers"]]
   );
 
+  const companyCascadeResult = await pool.query(
+    `SELECT table_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name IN ('supplier_transactions', 'client_transactions')
+       AND column_name = 'deleted_with_company'`
+  );
+
+  const transactionTinResult = await pool.query(
+    `SELECT table_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name IN ('supplier_transactions', 'client_transactions')
+       AND column_name = 'tin_number'`
+  );
+
+  const supplierAttachmentResult = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'supplier_transactions'
+       AND column_name IN ('attachment_name', 'attachment_mime_type', 'attachment_data')`
+  );
+
+  const outsideServiceAttachmentResult = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'outside_services'
+       AND column_name IN (
+         'payee', 'receipt_invoice_number', 'tin_number',
+         'attachment_path', 'attachment_original_name',
+         'attachment_mime_type', 'attachment_size'
+       )`
+  );
+
   if (missingTables.length > 0) {
     throw new Error(`Missing required tables: ${missingTables.join(", ")}`);
   }
@@ -95,16 +129,30 @@ async function verifyDatabase() {
   if (deletionPolicyResult.rows.length !== 5) {
     throw new Error("Role-aware deletion policy fields are missing");
   }
+  if (companyCascadeResult.rows.length !== 2) {
+    throw new Error("Company cascade-deletion tracking fields are missing");
+  }
+  if (transactionTinResult.rows.length !== 2) {
+    throw new Error("Supplier or client transaction TIN field is missing");
+  }
+  if (supplierAttachmentResult.rows.length !== 3) {
+    throw new Error("Supplier transaction Excel attachment fields are missing");
+  }
+  if (outsideServiceAttachmentResult.rows.length !== 7) {
+    throw new Error("Other expense BIR or attachment fields are missing");
+  }
 
   console.log("Database verification passed.");
   console.log(`Tables: ${foundTables.join(", ")}`);
   console.log("Views: payable_records, receivable_records");
   console.log("Generated fields: supplier_transactions.billing_status, client_transactions.billing_status");
   console.log("Billing states: Not Paid or Paid; partial payments are blocked");
-  console.log("Deletion policy: User deletions are restorable; Admin deletions remain audit-only");
+  console.log("Transaction tax fields: supplier and client TIN numbers are available");
+  console.log("Deletion policy: company deletions cascade to transactions; Admins can restore or make them permanently unrestorable");
+  console.log("Supplier P.O. import: Excel attachment storage fields are available");
   console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
-  console.log("Outside services: item, amount, and service date included in monthly analytics");
+  console.log("Other expenses: BIR details, amount, date, and optional PDF/image attachment are available");
   console.log(`Next voucher number: ${String(Number(voucherCounterResult.rows[0].current_value) + 1).padStart(6, "0")}`);
 }
 

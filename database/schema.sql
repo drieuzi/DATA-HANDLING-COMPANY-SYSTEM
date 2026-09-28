@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
     payment_date DATE,
     sales_invoice_number VARCHAR(80) NOT NULL,
     purchase_order_number VARCHAR(80) NOT NULL,
+    tin_number VARCHAR(40) NOT NULL,
     cheque_date DATE,
     amount NUMERIC(14, 2) NOT NULL,
     balance NUMERIC(14, 2) NOT NULL,
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
             COALESCE(BTRIM(sales_invoice_number), '') <> ''
             OR COALESCE(BTRIM(purchase_order_number), '') <> ''
         ),
+    CONSTRAINT supplier_transactions_tin_required CHECK (BTRIM(tin_number) <> ''),
     CONSTRAINT supplier_transactions_id_supplier_unique
         UNIQUE (id, supplier_id)
 );
@@ -278,6 +280,7 @@ CREATE TABLE IF NOT EXISTS client_transactions (
     transaction_date DATE NOT NULL,
     sales_invoice_number VARCHAR(80),
     purchase_order_number VARCHAR(80),
+    tin_number VARCHAR(40) NOT NULL,
     collection_receipt_number VARCHAR(80),
     payment_date DATE,
     cheque_date DATE,
@@ -304,6 +307,7 @@ CREATE TABLE IF NOT EXISTS client_transactions (
         COALESCE(BTRIM(sales_invoice_number), '') <> ''
         OR COALESCE(BTRIM(purchase_order_number), '') <> ''
     ),
+    CONSTRAINT client_transactions_tin_required CHECK (BTRIM(tin_number) <> ''),
     CONSTRAINT client_transactions_id_client_unique UNIQUE (id, client_id)
 );
 
@@ -363,16 +367,40 @@ CREATE INDEX IF NOT EXISTS client_payments_client_index
 
 CREATE TABLE IF NOT EXISTS outside_services (
     id BIGSERIAL PRIMARY KEY,
+    payee VARCHAR(160) NOT NULL,
     item VARCHAR(200) NOT NULL,
+    receipt_invoice_number VARCHAR(80) NOT NULL,
+    tin_number VARCHAR(40) NOT NULL,
     amount NUMERIC(14, 2) NOT NULL,
     service_date DATE NOT NULL,
+    attachment_path VARCHAR(500),
+    attachment_original_name VARCHAR(255),
+    attachment_mime_type VARCHAR(100),
+    attachment_size BIGINT,
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT outside_services_item_required CHECK (BTRIM(item) <> ''),
+    CONSTRAINT outside_services_payee_required CHECK (BTRIM(payee) <> ''),
+    CONSTRAINT outside_services_receipt_required CHECK (BTRIM(receipt_invoice_number) <> ''),
+    CONSTRAINT outside_services_tin_required CHECK (BTRIM(tin_number) <> ''),
     CONSTRAINT outside_services_positive_amount CHECK (amount > 0)
 );
+
+ALTER TABLE outside_services
+    ADD COLUMN IF NOT EXISTS payee VARCHAR(160),
+    ADD COLUMN IF NOT EXISTS receipt_invoice_number VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS tin_number VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS attachment_path VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS attachment_original_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS attachment_mime_type VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS attachment_size BIGINT;
+
+-- Existing expense records and attachments remain intact. Only the address
+-- field, which is no longer part of Other Expenses, is removed.
+ALTER TABLE outside_services
+    DROP COLUMN IF EXISTS business_address;
 
 CREATE INDEX IF NOT EXISTS outside_services_date_index
     ON outside_services (service_date DESC, created_at DESC);
@@ -417,6 +445,7 @@ ALTER TABLE vouchers
     CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled', 'Deleted'));
 
 ALTER TABLE supplier_transactions
+    ADD COLUMN IF NOT EXISTS tin_number VARCHAR(40),
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
@@ -450,6 +479,7 @@ ALTER TABLE clients
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE client_transactions
+    ADD COLUMN IF NOT EXISTS tin_number VARCHAR(40),
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -557,6 +587,7 @@ SELECT
     st.payment_date,
     st.sales_invoice_number,
     st.purchase_order_number,
+    st.tin_number,
     st.cheque_date,
     st.amount,
     st.balance,
@@ -581,6 +612,7 @@ SELECT
     client.business_address,
     ct.transaction_date,
     ct.sales_invoice_number,
+    ct.tin_number,
     ct.collection_receipt_number,
     ct.payment_date,
     ct.cheque_date,

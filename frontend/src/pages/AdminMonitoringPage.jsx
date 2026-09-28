@@ -24,6 +24,25 @@ function matchesCategory(log, category) {
   return false;
 }
 
+function getSearchableDateValues(value) {
+  if (!value) return [];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return [String(value)];
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return [
+    date.toLocaleString("en-PH"),
+    date.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }),
+    date.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }),
+    date.toLocaleDateString("en-PH", { month: "short", year: "numeric" }),
+    date.toLocaleDateString("en-PH", { month: "long", year: "numeric" }),
+    `${year}-${month}-${day}`,
+    String(value)
+  ];
+}
+
 export default function AdminMonitoringPage({
   user, auditLog = [], suppliers, clients, vouchers, onBack, onLogout,
   onRestoreSupplier, onPermanentDeleteSupplier, onRestoreSupplierTransaction,
@@ -31,9 +50,23 @@ export default function AdminMonitoringPage({
   onRestoreVoucher, onPermanentDeleteVoucher
 }) {
   const [category, setCategory] = useState("all");
+  const [query, setQuery] = useState("");
   const filteredLogs = useMemo(
-    () => auditLog.filter((log) => matchesCategory(log, category)),
-    [auditLog, category]
+    () => {
+      const normalizedQuery = query.trim().toLowerCase();
+      return auditLog
+        .filter((log) => matchesCategory(log, category))
+        .filter((log) => {
+          if (!normalizedQuery) return true;
+          const searchable = [
+            log.actorFullName,
+            log.actorUsername,
+            ...getSearchableDateValues(log.createdAt)
+          ].filter(Boolean).join(" ").toLowerCase();
+          return searchable.includes(normalizedQuery);
+        });
+    },
+    [auditLog, category, query]
   );
 
   function isLatestDeletion(log, action) {
@@ -117,12 +150,23 @@ export default function AdminMonitoringPage({
             <p>Administrator access</p>
             <h1>Admin Monitoring</h1>
           </div>
-          <label>
-            <span>Activity Category</span>
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
+          <div className="admin-monitoring-filters">
+            <label>
+              <span>Search Activity</span>
+              <input
+                type="search"
+                value={query}
+                placeholder="Search employee name, username, or date"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Activity Category</span>
+              <select value={category} onChange={(event) => setCategory(event.target.value)}>
+                {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+          </div>
         </section>
         <RecentAuditTable logs={filteredLogs} renderActions={renderActions} />
       </main>

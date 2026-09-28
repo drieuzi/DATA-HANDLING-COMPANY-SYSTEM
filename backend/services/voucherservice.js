@@ -26,6 +26,20 @@ async function lockTransaction(client, transactionId) {
   return result.rows[0];
 }
 
+async function lockTransactionForReversal(client, transactionId) {
+  const result = await client.query(
+    `SELECT *
+     FROM supplier_transactions
+     WHERE id = $1
+     FOR UPDATE`,
+    [transactionId]
+  );
+  if (!result.rows[0]) {
+    throw new HttpError(409, "The voucher's linked supplier transaction no longer exists.");
+  }
+  return result.rows[0];
+}
+
 async function reserveVoucherNumber(client) {
   const result = await client.query(
     `UPDATE system_counters
@@ -89,7 +103,14 @@ async function issueLockedVoucher(client, request, voucher) {
 }
 
 async function reverseIssuedVoucher(client, request, voucher, reason) {
-  const transaction = await lockTransaction(client, voucher.supplier_transaction_id);
+  // A voucher is part of the permanent payment history. Its payment must still
+  // be reversible after the related supplier or transaction has been soft
+  // deleted. Creating, issuing, and editing continue to use lockTransaction(),
+  // which intentionally requires an active supplier and transaction.
+  const transaction = await lockTransactionForReversal(
+    client,
+    voucher.supplier_transaction_id
+  );
   const paymentResult = await client.query(
     `SELECT * FROM payments
      WHERE voucher_id = $1 AND reversed_at IS NULL
@@ -197,11 +218,6 @@ async function updateVoucherDetails(request, voucherId, values) {
   try {
     await client.query("BEGIN");
     const voucher = await lockVoucher(client, voucherId);
-    if (request.user.role === "admin"
-      && values.paymentStatus === "Cancelled"
-      && voucher.payment_status !== "Cancelled") {
-      throw new HttpError(403, "Admin accounts do not have permission to cancel vouchers.");
-    }
     if (Number(voucher.supplier_id) !== Number(values.supplierId)
       || Number(voucher.supplier_transaction_id) !== Number(values.supplierTransactionId)) {
       throw new HttpError(409, "The linked supplier and transaction cannot be changed after the voucher is created.");
@@ -276,6 +292,34 @@ async function updateVoucherDetails(request, voucherId, values) {
     });
     await client.query("COMMIT");
     return updated.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
+async function cancelVoucherPayment(request, voucherId, reason) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const voucher = await lockVoucher(client, voucherId);
+    if (voucher.payment_status === "Cancelled") throw new HttpError(409, "Voucher is already cancelled.");
+
+    if (voucher.payment_status === "Issued") {
+      await reverseIssuedVoucher(client, request, voucher, reason);
+    }
+
+    await client.query(
+      `UPDATE vouchers SET payment_status = 'Cancelled', cancelled_at = NOW()
+       WHERE id = $1`,
+      [voucher.id]
+    );
+    await writeAudit(client, request, "VOUCHER_CANCELLED", "voucher", voucher.id, {
+      voucherNumber: voucher.voucher_number,
+      previousStatus: voucher.payment_status,
+      reason
+    });
+    await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -365,6 +409,7 @@ async function permanentlyDeleteVoucher(request, voucherId) {
 }
 
 module.exports = {
+  cancelVoucherPayment,
   createVoucherWithPayment,
   deleteVoucherForHistory,
   issueVoucherPayment,

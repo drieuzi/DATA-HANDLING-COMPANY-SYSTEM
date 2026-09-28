@@ -8,7 +8,8 @@ function createInitialFields(type, transaction) {
       balance: String(transaction.balance ?? ""),
       voucherDate: transaction.voucherDate === "—" ? "" : transaction.voucherDate || "",
       paymentDate: transaction.paymentDate === "—" ? "" : transaction.paymentDate || "",
-      chequeDate: transaction.chequeDate === "—" ? "" : transaction.chequeDate || ""
+      chequeDate: transaction.chequeDate === "—" ? "" : transaction.chequeDate || "",
+      tinNumber: transaction.tinNumber === "—" ? "" : transaction.tinNumber || ""
     };
   }
 
@@ -16,6 +17,7 @@ function createInitialFields(type, transaction) {
     ? {
         purchaseOrder: "",
         salesInvoice: "",
+        tinNumber: "",
         amount: "",
         attachmentName: ""
       }
@@ -23,6 +25,7 @@ function createInitialFields(type, transaction) {
         purchaseOrder: "",
         salesInvoice: "",
         collectionReceipt: "",
+        tinNumber: "",
         date: new Date().toISOString().slice(0, 10),
         paymentDate: "",
         amount: "",
@@ -67,8 +70,8 @@ export default function TransactionEditorDialog({
     const amount = Number(fields.amount);
     const balance = transaction?.balance ?? amount;
 
-    if (!fields.purchaseOrder.trim() || !fields.salesInvoice.trim() || amount <= 0) {
-      setMessage("P.O. number, S.I. number, and a valid amount are required.");
+    if (!fields.purchaseOrder.trim() || !fields.salesInvoice.trim() || !fields.tinNumber?.trim() || amount <= 0) {
+      setMessage("P.O. number, S.I. number, TIN number, and a valid amount are required.");
       return;
     }
 
@@ -80,6 +83,7 @@ export default function TransactionEditorDialog({
         id: transaction?.id,
         purchaseOrder: fields.purchaseOrder.trim(),
         salesInvoice: fields.salesInvoice.trim(),
+        tinNumber: fields.tinNumber.trim(),
         collectionReceipt: isSupplier ? undefined : fields.collectionReceipt?.trim() || "—",
         paymentDate: fields.paymentDate || (isSupplier ? "" : "—"),
         amount,
@@ -124,6 +128,11 @@ export default function TransactionEditorDialog({
           <label>
             Amount
             <input type="number" min="0.01" step="0.01" name="amount" value={fields.amount} onChange={updateField} required />
+          </label>
+
+          <label>
+            TIN Number
+            <input name="tinNumber" maxLength="40" value={fields.tinNumber || ""} onChange={updateField} required />
           </label>
 
           <label className="record-form__wide">

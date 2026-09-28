@@ -3,7 +3,7 @@
 }
 
 .outside-services-main {
-  width: min(1120px, calc(100% - 36px));
+  width: min(1240px, calc(100% - 36px));
   padding-top: 40px;
 }
 
@@ -14,6 +14,13 @@
 
 .outside-services-controls {
   background: var(--white);
+}
+
+.outside-services-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .outside-services-card .financial-records-heading {
@@ -37,7 +44,23 @@
 }
 
 .outside-services-table {
-  min-width: 720px;
+  min-width: 1420px;
+}
+
+.outside-services-report-card {
+  margin-top: 24px;
+}
+
+.outside-services-report-card .report-export-heading h2 {
+  margin: 0;
+}
+
+.outside-services-report-summary {
+  padding-top: 18px;
+}
+
+.outside-services-report-table {
+  min-width: 900px;
 }
 
 .outside-services-table th,
@@ -73,6 +96,103 @@
   font-weight: 800;
 }
 
+.outside-service-attachment-field {
+  display: grid;
+  gap: 9px;
+}
+
+.outside-service-attachment-field > span {
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.outside-service-attachment-field small,
+.outside-service-attachment-cell > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.outside-service-file-button,
+.table-file-action {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.outside-service-file-button {
+  padding: 11px 15px;
+  border: 2px solid var(--black);
+  border-radius: 14px;
+  background: var(--yellow-light);
+}
+
+.outside-service-file-button:hover,
+.table-file-action:hover {
+  background: var(--peach-strong);
+}
+
+.outside-service-file-button input,
+.table-file-action input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.outside-service-selected-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--black);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.outside-service-selected-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outside-service-selected-file button {
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.outside-service-attachment-cell {
+  display: grid;
+  gap: 9px;
+  min-width: 310px;
+}
+
+.outside-service-attachment-cell > span {
+  max-width: 310px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-file-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid var(--black);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--black);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
 @media (max-width: 640px) {
   .outside-services-main {
     width: min(100% - 24px, 520px);
@@ -83,6 +203,9 @@
     align-items: stretch;
     flex-direction: column;
   }
+
+  .outside-services-control-actions { justify-content: stretch; }
+  .outside-services-control-actions > * { flex: 1 1 100%; }
 
   .outside-services-toolbar {
     grid-template-columns: 1fr;

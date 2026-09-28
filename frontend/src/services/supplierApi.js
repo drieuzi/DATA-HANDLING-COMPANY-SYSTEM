@@ -21,6 +21,10 @@ export function restoreSupplier(id) {
   return apiRequest(`/suppliers/${id}/restore`, { method: "PATCH" });
 }
 
+export function permanentlyDeleteSupplier(id) {
+  return apiRequest(`/suppliers/${id}/permanent`, { method: "DELETE" });
+}
+
 export async function createSupplierTransaction(supplierId, values) {
   return (await apiRequest("/suppliers/transactions", {
     method: "POST", body: JSON.stringify({ ...values, supplierId })

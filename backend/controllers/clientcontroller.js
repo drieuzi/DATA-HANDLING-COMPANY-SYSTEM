@@ -10,6 +10,7 @@ function mapTransaction(row) {
     date: row.transaction_date,
     salesInvoice: row.sales_invoice_number || "—",
     purchaseOrder: row.purchase_order_number || "—",
+    tinNumber: row.tin_number || "—",
     collectionReceipt: row.collection_receipt_number || "—",
     paymentDate: row.payment_date || "—",
     chequeDate: row.cheque_date || "—",
@@ -102,7 +103,7 @@ function clientValues(body) {
   return {
     clientCode: validate.text(body.clientCode, "Client code", { max: 40 }),
     name: validate.text(body.name, "Client name", { required: true, max: 160 }),
-    businessAddress: validate.text(body.businessAddress, "Business address", { max: 1000 }),
+    businessAddress: validate.text(body.businessAddress, "Business address", { required: true, max: 1000 }),
     contactPerson: validate.text(body.contactPerson, "Contact person", { max: 120 }),
     contactNumber: validate.text(body.contactNumber, "Contact number", { max: 40 }),
     email: validate.text(body.email, "Email", { max: 160 })
@@ -250,7 +251,8 @@ function transactionValues(body) {
     purchaseOrder: validate.text(body.purchaseOrder, "Purchase order number", { max: 80 }),
     collectionReceipt: validate.text(body.collectionReceipt, "Collection receipt number", { max: 80 }),
     chequeDate: validate.date(body.chequeDate, "Cheque date"),
-    amount: validate.money(body.amount, "Amount")
+    amount: validate.money(body.amount, "Amount"),
+    tinNumber: validate.text(body.tinNumber, "TIN number", { required: true, max: 40 })
   };
   if (!values.salesInvoice && !values.purchaseOrder) {
     throw new HttpError(400, "Enter a sales invoice number or purchase order number.");
@@ -269,8 +271,8 @@ async function createTransaction(request, response, next) {
     const result = await client.query(
       `INSERT INTO client_transactions (
          client_id, transaction_date, sales_invoice_number, purchase_order_number,
-         collection_receipt_number, cheque_date, amount, balance, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8) RETURNING *`,
+         collection_receipt_number, cheque_date, amount, tin_number, balance, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $9) RETURNING *`,
       [clientId, ...Object.values(values), request.user.id]
     );
     await writeAudit(client, request, "CLIENT_TRANSACTION_CREATED", "client_transaction", result.rows[0].id, { clientId, amount: values.amount });
@@ -300,8 +302,9 @@ async function updateTransaction(request, response, next) {
       `UPDATE client_transactions SET transaction_date = $1,
          sales_invoice_number = $2, purchase_order_number = $3,
          collection_receipt_number = COALESCE($4, collection_receipt_number),
-         cheque_date = COALESCE($5, cheque_date), amount = $6, balance = $6 - $7
-       WHERE id = $8 AND deleted_at IS NULL RETURNING *`,
+         cheque_date = COALESCE($5, cheque_date), amount = $6, tin_number = $7,
+         balance = $6 - $8
+       WHERE id = $9 AND deleted_at IS NULL RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Client transaction not found.");

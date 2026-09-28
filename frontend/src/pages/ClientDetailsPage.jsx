@@ -33,6 +33,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
       transaction.purchaseOrder,
       transaction.salesInvoice,
       transaction.collectionReceipt,
+      transaction.tinNumber,
       transaction.date,
       transaction.amount,
       transaction.balance,
@@ -58,6 +59,10 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
           </>}
         </div></div>
         <section className="client-information" aria-label={`${client.name} information`}>
+          <div className="company-address-card">
+            <span>Business Address</span>
+            <strong>{client.businessAddress || "—"}</strong>
+          </div>
           <div>
             <span>Company Name</span>
             <strong>{client.name}</strong>
@@ -90,7 +95,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
               <span>Search transactions</span>
               <input
                 type="search"
-                placeholder="Search P.O., S.I., or C.R."
+                placeholder="Search P.O., S.I., C.R., or TIN"
                 value={transactionSearch}
                 onChange={(event) => setTransactionSearch(event.target.value)}
               />
@@ -113,6 +118,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                   <th>P.O. #</th>
                   <th>S.I. #</th>
                   <th>C.R. #</th>
+                  <th>TIN #</th>
                   <th>Date</th>
                   <th>Amount</th>
                   <th>Balance</th>
@@ -126,6 +132,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                     <td>{transaction.purchaseOrder}</td>
                     <td>{transaction.salesInvoice}</td>
                     <td>{transaction.collectionReceipt}</td>
+                    <td>{transaction.tinNumber || "—"}</td>
                     <td>{formatRecordDate(transaction.date)}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
                     <td>{formatCurrency(transaction.balance)}</td>
@@ -145,7 +152,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                       {isAdmin && !client.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                )) : <tr><td className="detail-records-empty" colSpan="8">No client transactions match these filters.</td></tr>}
+                )) : <tr><td className="detail-records-empty" colSpan="9">No client transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>
