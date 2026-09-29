@@ -21,8 +21,10 @@ export function restoreSupplier(id) {
   return apiRequest(`/suppliers/${id}/restore`, { method: "PATCH" });
 }
 
-export function permanentlyDeleteSupplier(id) {
-  return apiRequest(`/suppliers/${id}/permanent`, { method: "DELETE" });
+export function permanentlyDeleteSupplier(id, values) {
+  return apiRequest(`/suppliers/${id}/permanent`, {
+    method: "DELETE", body: JSON.stringify(values)
+  });
 }
 
 export async function createSupplierTransaction(supplierId, values) {
@@ -45,4 +47,10 @@ export function deleteSupplierTransaction(id, reason) {
 
 export function restoreSupplierTransaction(id) {
   return apiRequest(`/suppliers/transactions/${id}/restore`, { method: "PATCH" });
+}
+
+export function permanentlyDeleteSupplierTransaction(id, values) {
+  return apiRequest(`/suppliers/transactions/${id}/permanent`, {
+    method: "DELETE", body: JSON.stringify(values)
+  });
 }

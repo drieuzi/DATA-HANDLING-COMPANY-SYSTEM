@@ -6,7 +6,7 @@ import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
-export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onSaveSupplier, onDeleteSupplier, onRestoreSupplier, onPermanentDeleteSupplier }) {
+export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onSaveSupplier, onDeleteSupplier, onRestoreSupplier }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [companyEditorOpen, setCompanyEditorOpen] = useState(false);
@@ -14,17 +14,13 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
   const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const activeTransactions = supplier.transactions.filter((transaction) => !transaction.deletedAt);
-  const summaryTransactions = supplier.deletedAt && isAdmin ? supplier.transactions : activeTransactions;
-  const summary = summaryTransactions.reduce(
-    (totals, transaction) => ({
-      amount: totals.amount + transaction.amount,
-      balance: totals.balance + transaction.balance
-    }),
-    { amount: 0, balance: 0 }
+  const totalUnpaidAmount = activeTransactions.reduce(
+    (total, transaction) => total + Number(transaction.balance || 0),
+    0
   );
   const filteredTransactions = useMemo(() => supplier.transactions.filter((transaction) => {
-    if (!isAdmin && transaction.deletedAt) return false;
-    const effectiveStatus = transaction.deletedAt ? "Deleted" : transaction.billingStatus;
+    if (transaction.deletedAt) return false;
+    const effectiveStatus = transaction.billingStatus;
     const matchesStatus = transactionStatus === "All" || effectiveStatus === transactionStatus;
     const searchableDetails = [
       supplier.name,
@@ -38,7 +34,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
       effectiveStatus
     ].filter(Boolean).join(" ").toLowerCase();
     return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
-  }), [isAdmin, supplier.transactions, transactionSearch, transactionStatus]);
+  }), [supplier.transactions, transactionSearch, transactionStatus]);
 
   return (
     <div className="app-page supplier-page supplier-details-page">
@@ -51,7 +47,6 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
         <div className="management-toolbar"><span>{supplier.deletedAt ? "Deleted company controls" : "Company controls"}</span><div className="row-actions">
           {supplier.deletedAt ? <>
             <button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore Supplier</button>
-            <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this supplier and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
           </> : <>
             <button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Supplier</button>
             <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt(`Reason for deleting ${supplier.name}:`); if (!reason?.trim()) return; if (!window.confirm(`Delete ${supplier.name} and its linked transactions? An Admin can restore them later.`)) return; try { await onDeleteSupplier(supplier.id, reason.trim()); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Supplier</button>
@@ -67,12 +62,12 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
             <strong>{supplier.name}</strong>
           </div>
           <div>
-            <span>Total Purchases</span>
-            <strong>{formatCurrency(summary.amount)}</strong>
+            <span>Contact Person</span>
+            <strong>{supplier.contactPerson || "—"}</strong>
           </div>
           <div>
-            <span>Remaining Balance</span>
-            <strong>{formatCurrency(summary.balance)}</strong>
+            <span>Total Unpaid Amount</span>
+            <strong>{formatCurrency(totalUnpaidAmount)}</strong>
           </div>
           <div>
             <span>Billing Status</span>
@@ -105,7 +100,6 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                 <option>All</option>
                 <option>Not Paid</option>
                 <option>Paid</option>
-                {isAdmin && <option>Deleted</option>}
               </select>
             </label>
           </div>

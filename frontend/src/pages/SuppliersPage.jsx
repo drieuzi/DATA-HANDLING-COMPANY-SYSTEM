@@ -14,7 +14,6 @@ export default function SuppliersPage({
   onSaveSupplier,
   onDeleteSupplier,
   onRestoreSupplier,
-  onPermanentDeleteSupplier,
   activeTab,
   onTabChange
 }) {
@@ -24,7 +23,7 @@ export default function SuppliersPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const isAdmin = user?.role === "admin";
   const visibleSuppliers = suppliers
-    .filter((supplier) => isAdmin || !supplier.deletedAt)
+    .filter((supplier) => !supplier.deletedAt)
     .filter((supplier) => supplier.name.toLowerCase().includes(companySearch.trim().toLowerCase()))
     .filter((supplier) => {
       if (statusFilter === "all") return true;
@@ -96,7 +95,6 @@ export default function SuppliersPage({
                     <option value="all">All statuses</option>
                     <option value="paid">Paid</option>
                     <option value="not paid">Not Paid</option>
-                    {isAdmin && <option value="deleted">Deleted</option>}
                   </select>
                 </label>
               </div>
@@ -128,7 +126,6 @@ export default function SuppliersPage({
                             <span className={`supplier-status supplier-status--${supplier.billingStatus?.toLowerCase().replaceAll(" ", "-") || "not-paid"}`}>{supplier.deletedAt ? "Deleted" : supplier.billingStatus}</span>
                             {isAdmin && supplier.deletedAt && supplier.restoreAllowed !== false && <div className="row-actions">
                               <button type="button" onClick={async () => { try { await onRestoreSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Restore</button>
-                              <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this supplier and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteSupplier(supplier.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
                             </div>}
                           </div>
                         </td>

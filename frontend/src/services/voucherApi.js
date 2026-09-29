@@ -35,8 +35,10 @@ export function deleteVoucher(id, reason) {
   return apiRequest(`/vouchers/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) });
 }
 
-export function permanentlyDeleteVoucher(id) {
-  return apiRequest(`/vouchers/${id}/permanent`, { method: "DELETE" });
+export function permanentlyDeleteVoucher(id, values) {
+  return apiRequest(`/vouchers/${id}/permanent`, {
+    method: "DELETE", body: JSON.stringify(values)
+  });
 }
 
 export function restoreVoucher(id) {

@@ -7,7 +7,7 @@ import ClientEditorDialog from "../components/ClientEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
-export default function ClientDetailsPage({ client, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onSaveClient, onDeleteClient, onRestoreClient, onPermanentDeleteClient }) {
+export default function ClientDetailsPage({ client, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onSaveClient, onDeleteClient, onRestoreClient }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [paymentTransaction, setPaymentTransaction] = useState(null);
@@ -16,17 +16,13 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
   const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const activeTransactions = client.transactions.filter((transaction) => !transaction.deletedAt);
-  const summaryTransactions = client.deletedAt && isAdmin ? client.transactions : activeTransactions;
-  const summary = summaryTransactions.reduce(
-    (totals, transaction) => ({
-      amount: totals.amount + Number(transaction.amount || 0),
-      balance: totals.balance + Number(transaction.balance || 0)
-    }),
-    { amount: 0, balance: 0 }
+  const totalUnpaidAmount = activeTransactions.reduce(
+    (total, transaction) => total + Number(transaction.balance || 0),
+    0
   );
   const filteredTransactions = useMemo(() => client.transactions.filter((transaction) => {
-    if (!isAdmin && transaction.deletedAt) return false;
-    const effectiveStatus = transaction.deletedAt ? "Deleted" : transaction.billingStatus;
+    if (transaction.deletedAt) return false;
+    const effectiveStatus = transaction.billingStatus;
     const matchesStatus = transactionStatus === "All" || effectiveStatus === transactionStatus;
     const searchableDetails = [
       client.name,
@@ -40,7 +36,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
       effectiveStatus
     ].filter(Boolean).join(" ").toLowerCase();
     return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
-  }), [client.transactions, isAdmin, transactionSearch, transactionStatus]);
+  }), [client.transactions, transactionSearch, transactionStatus]);
   return (
     <div className="app-page client-details-page">
       <TrackRecordHeader
@@ -52,7 +48,6 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
         <div className="management-toolbar"><span>{client.deletedAt ? "Deleted company controls" : "Company controls"}</span><div className="row-actions">
           {client.deletedAt ? <>
             <button type="button" onClick={async () => { try { await onRestoreClient(client.id); } catch (error) { window.alert(error.message); } }}>Restore Client</button>
-            <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this client and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteClient(client.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
           </> : <>
             <button type="button" onClick={() => setCompanyEditorOpen(true)}>Edit Client</button>
             <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt(`Reason for deleting ${client.name}:`); if (!reason?.trim()) return; if (!window.confirm(`Delete ${client.name} and its linked transactions? An Admin can restore them later.`)) return; try { await onDeleteClient(client.id, reason.trim()); onBack(); } catch (error) { window.alert(error.message); } }}>Delete Client</button>
@@ -68,12 +63,12 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
             <strong>{client.name}</strong>
           </div>
           <div>
-            <span>Total Sales</span>
-            <strong>{formatCurrency(summary.amount)}</strong>
+            <span>Contact Person</span>
+            <strong>{client.contactPerson || "—"}</strong>
           </div>
           <div>
-            <span>Remaining Balance</span>
-            <strong>{formatCurrency(summary.balance)}</strong>
+            <span>Total Unpaid Amount</span>
+            <strong>{formatCurrency(totalUnpaidAmount)}</strong>
           </div>
           <div>
             <span>Billing Status</span>
@@ -106,7 +101,6 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                 <option>All</option>
                 <option>Not Paid</option>
                 <option>Paid</option>
-                {isAdmin && <option>Deleted</option>}
               </select>
             </label>
           </div>

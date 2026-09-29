@@ -169,15 +169,20 @@ async function deleteVoucher(request, response, next) {
     const voucherId = validate.id(request.params.id, "Voucher ID");
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await deleteVoucherForHistory(request, voucherId, reason);
-    response.json({ message: "Voucher marked Deleted and kept in Voucher Cheque records." });
+    response.json({ message: "Voucher moved to Admin Monitoring deleted records." });
   } catch (error) { next(error); }
 }
 
 async function permanentlyDeleteVoucher(request, response, next) {
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
-    await permanentlyDeleteVoucherRecord(request, voucherId);
-    response.json({ message: "Voucher is now permanently unrestorable. Audit history was kept." });
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+    await permanentlyDeleteVoucherRecord(request, voucherId, reason);
+    response.json({ message: "Voucher and its reversed payment record were permanently deleted." });
   } catch (error) { next(error); }
 }
 

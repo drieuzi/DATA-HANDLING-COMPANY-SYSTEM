@@ -152,6 +152,123 @@
   color: var(--muted);
 }
 
+.permanent-purge-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(20 8 8 / 68%);
+}
+
+.permanent-purge-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 26px;
+  border: 2px solid var(--black);
+  border-radius: 24px;
+  background: var(--white);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 35%);
+}
+
+.permanent-purge-eyebrow,
+.permanent-purge-dialog h2,
+.permanent-purge-dialog > p {
+  margin: 0;
+}
+
+.permanent-purge-eyebrow {
+  color: var(--red);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.permanent-purge-dialog h2 {
+  margin-top: 6px;
+}
+
+.permanent-purge-dialog > p:not(.permanent-purge-eyebrow) {
+  margin-top: 12px;
+  line-height: 1.55;
+}
+
+.permanent-purge-dialog form,
+.permanent-purge-dialog label {
+  display: grid;
+  gap: 8px;
+}
+
+.permanent-purge-dialog form {
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.permanent-purge-dialog label span {
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.permanent-purge-dialog input,
+.permanent-purge-dialog textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid var(--black);
+  border-radius: 14px;
+  background: var(--yellow-light);
+  color: var(--black);
+  font: inherit;
+}
+
+.permanent-purge-dialog textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.permanent-purge-error {
+  margin: 0;
+  color: var(--red);
+  font-weight: 800;
+}
+
+.permanent-purge-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.permanent-purge-actions button {
+  padding: 11px 16px;
+  border: 2px solid var(--black);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.permanent-purge-actions .danger-action {
+  border-color: var(--red);
+  background: var(--red);
+  color: var(--white);
+}
+
+.permanent-purge-actions button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 var(--brown-status);
+}
+
+.permanent-purge-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 640px) {
   .admin-monitoring-main {
     width: min(100% - 24px, 520px);

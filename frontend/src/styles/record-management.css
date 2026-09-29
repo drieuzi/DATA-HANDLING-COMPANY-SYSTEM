@@ -76,6 +76,36 @@
 .records-toolbar select { width: 100%; padding: 11px 13px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); color: var(--black); font: inherit; }
 .record-form textarea { resize: vertical; }
 .record-form small { overflow: hidden; text-overflow: ellipsis; text-transform: none; }
+.record-form .currency-amount-input {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+}
+.record-form .currency-amount-input:focus-within {
+  outline: 2px solid var(--orange-accent);
+  outline-offset: 2px;
+}
+.record-form .currency-amount-input__prefix {
+  display: grid;
+  min-width: 44px;
+  place-items: center;
+  border-right: 2px solid var(--border);
+  background: var(--yellow-light);
+  color: var(--black);
+  font-size: 1rem;
+  font-weight: 900;
+}
+.record-form .currency-amount-input input {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .record-form .voucher-tax-toggle { display: flex; align-items: center; grid-template-columns: none; flex-direction: row; gap: 10px; padding: 12px 14px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); }
 .record-form .voucher-tax-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--orange); }
 .record-form__wide { grid-column: 1 / -1; }

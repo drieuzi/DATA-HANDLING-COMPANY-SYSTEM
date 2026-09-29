@@ -23,6 +23,7 @@ export default function VouchersPage({
   const [status, setStatus] = useState("All");
   const isAdmin = user?.role === "admin";
   const filtered = useMemo(() => vouchers.filter((voucher) => {
+    if (voucher.deletedAt) return false;
     const effectiveStatus = voucherStatus(voucher);
     const matchesStatus = status === "All" || effectiveStatus === status;
     const haystack = `${voucher.voucherNumber} ${voucher.supplierName} ${voucher.purchaseOrder} ${voucher.salesInvoice}`.toLowerCase();
@@ -86,7 +87,7 @@ export default function VouchersPage({
           </div>
           <div className="records-toolbar">
             <input type="search" placeholder="Search voucher, supplier, P.O., or S.I.…" value={query} onChange={(event) => setQuery(event.target.value)} />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Cancelled</option>{isAdmin && <option>Deleted</option>}</select>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Cancelled</option></select>
           </div>
           <div className="financial-table-wrapper"><table className="financial-record-table voucher-table"><thead><tr><th>Voucher #</th><th>Supplier</th><th>P.O. #</th><th>S.I. #</th><th>Voucher Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{filtered.length ? filtered.map((voucher) => {
@@ -99,7 +100,7 @@ export default function VouchersPage({
                   {!voucher.deletedAt && <button type="button" onClick={() => setEditingVoucher(voucher)}>Edit</button>}
                   {!voucher.deletedAt && <button type="button" onClick={() => downloadVoucher(voucher)}>Download</button>}
                   {!voucher.deletedAt && effectiveStatus === "Draft" && <button type="button" onClick={() => runAction(() => onIssue(voucher.id))}>Issue</button>}
-                  {!voucher.deletedAt && (!isAdmin || ["Draft", "Issued"].includes(effectiveStatus)) && <button className="danger-action" type="button" onClick={() => { if (window.confirm(`Delete voucher ${voucher.voucherNumber}? It will remain in Voucher Cheque records with Deleted status${effectiveStatus === "Issued" ? " and its payment will be reversed" : ""}.`)) runAction(() => onDelete(voucher.id, "Deleted from active voucher records")); }}>Delete</button>}
+                  {!voucher.deletedAt && (!isAdmin || ["Draft", "Issued"].includes(effectiveStatus)) && <button className="danger-action" type="button" onClick={() => { if (window.confirm(`Delete voucher ${voucher.voucherNumber}? It will move to Admin Monitoring${effectiveStatus === "Issued" ? " and its payment will be reversed" : ""}.`)) runAction(() => onDelete(voucher.id, "Deleted from active voucher records")); }}>Delete</button>}
                 </div></td>
               </tr>
               );

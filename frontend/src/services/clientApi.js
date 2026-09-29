@@ -20,8 +20,10 @@ export function restoreClient(id) {
   return apiRequest(`/clients/${id}/restore`, { method: "PATCH" });
 }
 
-export function permanentlyDeleteClient(id) {
-  return apiRequest(`/clients/${id}/permanent`, { method: "DELETE" });
+export function permanentlyDeleteClient(id, values) {
+  return apiRequest(`/clients/${id}/permanent`, {
+    method: "DELETE", body: JSON.stringify(values)
+  });
 }
 
 export async function createClientTransaction(clientId, values) {
@@ -42,6 +44,12 @@ export function deleteClientTransaction(id, reason) {
 
 export function restoreClientTransaction(id) {
   return apiRequest(`/clients/transactions/${id}/restore`, { method: "PATCH" });
+}
+
+export function permanentlyDeleteClientTransaction(id, values) {
+  return apiRequest(`/clients/transactions/${id}/permanent`, {
+    method: "DELETE", body: JSON.stringify(values)
+  });
 }
 
 export async function recordClientPayment(transactionId, values) {

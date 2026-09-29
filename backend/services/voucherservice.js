@@ -376,29 +376,50 @@ async function deleteVoucherForHistory(request, voucherId, reason) {
   } finally { client.release(); }
 }
 
-async function permanentlyDeleteVoucher(request, voucherId) {
+async function permanentlyDeleteVoucher(request, voucherId, reason) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE vouchers SET restore_allowed = FALSE,
-         permanently_deleted_by = $1, permanently_deleted_at = NOW(),
-         updated_at = NOW()
-       WHERE id = $2 AND payment_status = 'Deleted'
+      `SELECT id, voucher_number, supplier_transaction_id, supplier_id,
+         attachment_name
+       FROM vouchers
+       WHERE id = $1 AND payment_status = 'Deleted'
          AND deleted_at IS NOT NULL AND restore_allowed = TRUE
-       RETURNING id, voucher_number, permanently_deleted_at`,
-      [request.user.id, voucherId]
+       FOR UPDATE`,
+      [voucherId]
     );
     const voucher = result.rows[0];
     if (!voucher) {
       throw new HttpError(404, "Restorable deleted voucher not found.");
     }
-    await writeAudit(client, request, "VOUCHER_PERMANENTLY_DELETED", "voucher", voucher.id, {
+
+    const payments = await client.query(
+      "SELECT id, reversed_at FROM payments WHERE voucher_id = $1 FOR UPDATE",
+      [voucherId]
+    );
+    if (payments.rows.some((payment) => !payment.reversed_at)) {
+      throw new HttpError(409, "The voucher still has an active payment and cannot be permanently deleted.");
+    }
+    const paymentIds = payments.rows.map((payment) => payment.id);
+    await client.query(
+      `DELETE FROM audit_logs
+       WHERE (entity_type = 'voucher' AND entity_id = $1)
+          OR (entity_type = 'payment' AND entity_id = ANY($2::BIGINT[]))`,
+      [voucherId, paymentIds]
+    );
+    await client.query("DELETE FROM payments WHERE voucher_id = $1", [voucherId]);
+    await client.query("DELETE FROM vouchers WHERE id = $1", [voucherId]);
+
+    await writeAudit(client, request, "PERMANENT_PURGE", "voucher", voucher.id, {
       voucherNumber: voucher.voucher_number,
-      deletionMode: "unrestorable",
-      permanentlyDeletedBy: request.user.fullName || request.user.username,
-      permanentlyDeletedAt: voucher.permanently_deleted_at,
-      actionPerformed: "Restore permission permanently removed"
+      transactionId: String(voucher.supplier_transaction_id),
+      supplierId: String(voucher.supplier_id),
+      reason,
+      status: "Unrestorable",
+      deletedPaymentCount: payments.rowCount,
+      deletedAttachmentCount: voucher.attachment_name ? 1 : 0,
+      financialEffectRemoved: true
     });
     await client.query("COMMIT");
     return voucher;

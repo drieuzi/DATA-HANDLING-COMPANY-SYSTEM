@@ -219,25 +219,57 @@ async function permanentlyDeleteClient(request, response, next) {
   const client = await pool.connect();
   try {
     const clientId = validate.id(request.params.id, "Client ID");
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE clients SET restore_allowed = FALSE
+      `SELECT id, name FROM clients
        WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
-       RETURNING id, name`,
+       FOR UPDATE`,
       [clientId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Restorable deleted client not found.");
-    const linked = await client.query(
-      `UPDATE client_transactions SET restore_allowed = FALSE, deleted_with_company = FALSE
-       WHERE client_id = $1 RETURNING id`,
+
+    const transactions = await client.query(
+      "SELECT id FROM client_transactions WHERE client_id = $1 FOR UPDATE",
       [clientId]
     );
-    await writeAudit(client, request, "CLIENT_PERMANENTLY_DELETED", "client", clientId, {
-      name: result.rows[0].name, linkedTransactionsMadeUnrestorable: linked.rowCount,
-      deletionMode: "unrestorable"
+    const payments = await client.query(
+      "SELECT id FROM client_payments WHERE client_id = $1 FOR UPDATE",
+      [clientId]
+    );
+    const transactionIds = transactions.rows.map((row) => row.id);
+    const paymentIds = payments.rows.map((row) => row.id);
+
+    await client.query(
+      `DELETE FROM audit_logs
+       WHERE (entity_type = 'client' AND entity_id = $1)
+          OR (entity_type = 'client_transaction' AND entity_id = ANY($2::BIGINT[]))
+          OR (entity_type = 'client_payment' AND entity_id = ANY($3::BIGINT[]))`,
+      [clientId, transactionIds, paymentIds]
+    );
+    await client.query("DELETE FROM client_payments WHERE client_id = $1", [clientId]);
+    await client.query("DELETE FROM client_transactions WHERE client_id = $1", [clientId]);
+    await client.query("DELETE FROM clients WHERE id = $1", [clientId]);
+
+    await writeAudit(client, request, "PERMANENT_PURGE", "client", clientId, {
+      companyId: String(clientId),
+      companyName: result.rows[0].name,
+      reason,
+      status: "Unrestorable",
+      transactionIds: transactionIds.map(String),
+      deletedTransactionCount: transactions.rowCount,
+      deletedPaymentCount: payments.rowCount,
+      financialEffectRemoved: true
     });
     await client.query("COMMIT");
-    response.json({ message: "Client and its linked records are now permanently unrestorable. Audit history was kept." });
+    response.json({
+      message: "Client, linked transactions, and payments were permanently deleted. A minimal audit entry was kept."
+    });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -325,16 +357,16 @@ async function deleteTransaction(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE client_transactions SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, restore_allowed = $3, deleted_with_company = FALSE
-       WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
-      [request.user.id, reason, request.user.role !== "admin", transactionId]
+         deletion_reason = $2, restore_allowed = TRUE, deleted_with_company = FALSE
+       WHERE id = $3 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Client transaction not found.");
     await writeAudit(client, request, "CLIENT_TRANSACTION_DELETED", "client_transaction", transactionId, {
-      reason, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+      reason, deletionMode: "restorable"
     });
     await client.query("COMMIT");
-    response.json({ message: request.user.role === "admin" ? "Client transaction permanently hidden. Audit history was kept." : "Client transaction moved to deleted records." });
+    response.json({ message: "Client transaction moved to Admin Monitoring deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -358,6 +390,61 @@ async function restoreTransaction(request, response, next) {
     await writeAudit(client, request, "CLIENT_TRANSACTION_RESTORED", "client_transaction", transactionId);
     await client.query("COMMIT");
     response.json({ transaction: mapTransaction(result.rows[0]), message: "Client transaction restored." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteTransaction(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const transactionId = validate.id(request.params.id, "Transaction ID");
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+
+    await client.query("BEGIN");
+    const transactionResult = await client.query(
+      `SELECT id, client_id, sales_invoice_number, purchase_order_number,
+         collection_receipt_number
+       FROM client_transactions
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       FOR UPDATE`,
+      [transactionId]
+    );
+    const transaction = transactionResult.rows[0];
+    if (!transaction) throw new HttpError(404, "Restorable deleted client transaction not found.");
+
+    const payments = await client.query(
+      "SELECT id FROM client_payments WHERE client_transaction_id = $1 FOR UPDATE",
+      [transactionId]
+    );
+    const paymentIds = payments.rows.map((row) => row.id);
+    await client.query(
+      `DELETE FROM audit_logs
+       WHERE (entity_type = 'client_transaction' AND entity_id = $1)
+          OR (entity_type = 'client_payment' AND entity_id = ANY($2::BIGINT[]))`,
+      [transactionId, paymentIds]
+    );
+    await client.query("DELETE FROM client_payments WHERE client_transaction_id = $1", [transactionId]);
+    await client.query("DELETE FROM client_transactions WHERE id = $1", [transactionId]);
+
+    await writeAudit(client, request, "PERMANENT_PURGE", "client_transaction", transactionId, {
+      transactionId: String(transactionId),
+      clientId: String(transaction.client_id),
+      salesInvoiceNumber: transaction.sales_invoice_number,
+      purchaseOrderNumber: transaction.purchase_order_number,
+      collectionReceiptNumber: transaction.collection_receipt_number,
+      reason,
+      status: "Unrestorable",
+      deletedPaymentCount: payments.rowCount,
+      financialEffectRemoved: true
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Client transaction and all linked payments were permanently deleted." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -450,6 +537,7 @@ async function listReceivables(request, response, next) {
 
 module.exports = {
   addPayment, createClient, createTransaction, deleteClient, deleteTransaction,
-  getClient, listClients, listReceivables, paymentHistory, permanentlyDeleteClient, restoreClient,
+  getClient, listClients, listReceivables, paymentHistory,
+  permanentlyDeleteClient, permanentlyDeleteTransaction, restoreClient,
   restoreTransaction, updateClient, updateTransaction
 };

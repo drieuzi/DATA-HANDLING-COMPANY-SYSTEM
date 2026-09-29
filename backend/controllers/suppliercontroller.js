@@ -228,25 +228,69 @@ async function permanentlyDeleteSupplier(request, response, next) {
   const client = await pool.connect();
   try {
     const supplierId = validate.id(request.params.id, "Supplier ID");
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE suppliers SET restore_allowed = FALSE
+      `SELECT id, name FROM suppliers
        WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
-       RETURNING id, name`,
+       FOR UPDATE`,
       [supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Restorable deleted supplier not found.");
-    const linked = await client.query(
-      `UPDATE supplier_transactions SET restore_allowed = FALSE, deleted_with_company = FALSE
-       WHERE supplier_id = $1 RETURNING id`,
+
+    const transactions = await client.query(
+      "SELECT id FROM supplier_transactions WHERE supplier_id = $1 FOR UPDATE",
       [supplierId]
     );
-    await writeAudit(client, request, "SUPPLIER_PERMANENTLY_DELETED", "supplier", supplierId, {
-      name: result.rows[0].name, linkedTransactionsMadeUnrestorable: linked.rowCount,
-      deletionMode: "unrestorable"
+    const vouchers = await client.query(
+      `SELECT id, voucher_number, attachment_name
+       FROM vouchers WHERE supplier_id = $1 FOR UPDATE`,
+      [supplierId]
+    );
+    const payments = await client.query(
+      "SELECT id FROM payments WHERE supplier_id = $1 FOR UPDATE",
+      [supplierId]
+    );
+
+    const transactionIds = transactions.rows.map((row) => row.id);
+    const voucherIds = vouchers.rows.map((row) => row.id);
+    const paymentIds = payments.rows.map((row) => row.id);
+
+    await client.query(
+      `DELETE FROM audit_logs
+       WHERE (entity_type = 'supplier' AND entity_id = $1)
+          OR (entity_type = 'supplier_transaction' AND entity_id = ANY($2::BIGINT[]))
+          OR (entity_type = 'voucher' AND entity_id = ANY($3::BIGINT[]))
+          OR (entity_type = 'payment' AND entity_id = ANY($4::BIGINT[]))`,
+      [supplierId, transactionIds, voucherIds, paymentIds]
+    );
+    await client.query("DELETE FROM payments WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM vouchers WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier_transactions WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM suppliers WHERE id = $1", [supplierId]);
+
+    await writeAudit(client, request, "PERMANENT_PURGE", "supplier", supplierId, {
+      companyId: String(supplierId),
+      companyName: result.rows[0].name,
+      reason,
+      status: "Unrestorable",
+      transactionIds: transactionIds.map(String),
+      voucherNumbers: vouchers.rows.map((row) => row.voucher_number),
+      deletedTransactionCount: transactions.rowCount,
+      deletedVoucherCount: vouchers.rowCount,
+      deletedPaymentCount: payments.rowCount,
+      deletedAttachmentCount: vouchers.rows.filter((row) => row.attachment_name).length,
+      financialEffectRemoved: true
     });
     await client.query("COMMIT");
-    response.json({ message: "Supplier and its linked records are now permanently unrestorable. Audit history was kept." });
+    response.json({
+      message: "Supplier, linked transactions, vouchers, payments, and attachment records were permanently deleted. A minimal audit entry was kept."
+    });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -347,16 +391,16 @@ async function deleteTransaction(request, response, next) {
     }
     const result = await client.query(
       `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
-         deletion_reason = $2, restore_allowed = $3, deleted_with_company = FALSE
-       WHERE id = $4 AND deleted_at IS NULL RETURNING id`,
-      [request.user.id, reason, request.user.role !== "admin", transactionId]
+         deletion_reason = $2, restore_allowed = TRUE, deleted_with_company = FALSE
+       WHERE id = $3 AND deleted_at IS NULL RETURNING id`,
+      [request.user.id, reason, transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Transaction not found.");
     await writeAudit(client, request, "SUPPLIER_TRANSACTION_DELETED", "supplier_transaction", transactionId, {
-      reason, deletionMode: request.user.role === "admin" ? "permanent_hidden" : "restorable"
+      reason, deletionMode: "restorable"
     });
     await client.query("COMMIT");
-    response.json({ message: request.user.role === "admin" ? "Transaction permanently hidden. Audit history was kept." : "Transaction moved to deleted records." });
+    response.json({ message: "Transaction moved to Admin Monitoring deleted records." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -381,6 +425,71 @@ async function restoreTransaction(request, response, next) {
     await writeAudit(client, request, "SUPPLIER_TRANSACTION_RESTORED", "supplier_transaction", transactionId);
     await client.query("COMMIT");
     response.json({ transaction: mapTransaction(result.rows[0]), message: "Transaction restored." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteTransaction(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const transactionId = validate.id(request.params.id, "Transaction ID");
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+
+    await client.query("BEGIN");
+    const transactionResult = await client.query(
+      `SELECT id, supplier_id, sales_invoice_number, purchase_order_number
+       FROM supplier_transactions
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       FOR UPDATE`,
+      [transactionId]
+    );
+    const transaction = transactionResult.rows[0];
+    if (!transaction) throw new HttpError(404, "Restorable deleted supplier transaction not found.");
+
+    const vouchers = await client.query(
+      `SELECT id, voucher_number, attachment_name
+       FROM vouchers WHERE supplier_transaction_id = $1 FOR UPDATE`,
+      [transactionId]
+    );
+    const payments = await client.query(
+      "SELECT id FROM payments WHERE supplier_transaction_id = $1 FOR UPDATE",
+      [transactionId]
+    );
+    const voucherIds = vouchers.rows.map((row) => row.id);
+    const paymentIds = payments.rows.map((row) => row.id);
+
+    await client.query(
+      `DELETE FROM audit_logs
+       WHERE (entity_type = 'supplier_transaction' AND entity_id = $1)
+          OR (entity_type = 'voucher' AND entity_id = ANY($2::BIGINT[]))
+          OR (entity_type = 'payment' AND entity_id = ANY($3::BIGINT[]))`,
+      [transactionId, voucherIds, paymentIds]
+    );
+    await client.query("DELETE FROM payments WHERE supplier_transaction_id = $1", [transactionId]);
+    await client.query("DELETE FROM vouchers WHERE supplier_transaction_id = $1", [transactionId]);
+    await client.query("DELETE FROM supplier_transactions WHERE id = $1", [transactionId]);
+
+    await writeAudit(client, request, "PERMANENT_PURGE", "supplier_transaction", transactionId, {
+      transactionId: String(transactionId),
+      supplierId: String(transaction.supplier_id),
+      salesInvoiceNumber: transaction.sales_invoice_number,
+      purchaseOrderNumber: transaction.purchase_order_number,
+      voucherNumbers: vouchers.rows.map((row) => row.voucher_number),
+      reason,
+      status: "Unrestorable",
+      deletedVoucherCount: vouchers.rowCount,
+      deletedPaymentCount: payments.rowCount,
+      deletedAttachmentCount: vouchers.rows.filter((row) => row.attachment_name).length,
+      financialEffectRemoved: true
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Supplier transaction and all linked vouchers and payments were permanently deleted." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -420,5 +529,6 @@ async function getTransaction(request, response, next) {
 module.exports = {
   createSupplier, createTransaction, deleteSupplier, deleteTransaction,
   getSupplier, getTransaction, listSuppliers, listTransactions,
-  permanentlyDeleteSupplier, restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
+  permanentlyDeleteSupplier, permanentlyDeleteTransaction,
+  restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
 };

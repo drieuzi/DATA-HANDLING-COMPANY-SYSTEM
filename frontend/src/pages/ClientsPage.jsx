@@ -15,7 +15,6 @@ export default function ClientsPage({
   onSaveClient,
   onDeleteClient,
   onRestoreClient,
-  onPermanentDeleteClient,
   activeTab,
   onTabChange
 }) {
@@ -25,7 +24,7 @@ export default function ClientsPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const isAdmin = user?.role === "admin";
   const visibleClients = clients
-    .filter((client) => isAdmin || !client.deletedAt)
+    .filter((client) => !client.deletedAt)
     .filter((client) => client.name.toLowerCase().includes(companySearch.trim().toLowerCase()))
     .filter((client) => {
       if (statusFilter === "all") return true;
@@ -98,7 +97,6 @@ export default function ClientsPage({
                     <option value="all">All statuses</option>
                     <option value="paid">Paid</option>
                     <option value="not paid">Not Paid</option>
-                    {isAdmin && <option value="deleted">Deleted</option>}
                   </select>
                 </label>
               </div>
@@ -130,7 +128,6 @@ export default function ClientsPage({
                             <span className={`client-status client-status--${client.billingStatus?.toLowerCase().replaceAll(" ", "-") || "not-paid"}`}>{client.deletedAt ? "Deleted" : client.billingStatus}</span>
                             {isAdmin && client.deletedAt && client.restoreAllowed !== false && <div className="row-actions">
                               <button type="button" onClick={async () => { try { await onRestoreClient(client.id); } catch (error) { window.alert(error.message); } }}>Restore</button>
-                              <button className="danger-action" type="button" onClick={async () => { if (!window.confirm("Are you sure you want to permanently delete this client and its linked records? This action cannot be undone.")) return; try { await onPermanentDeleteClient(client.id); } catch (error) { window.alert(error.message); } }}>Delete Permanently</button>
                             </div>}
                           </div>
                         </td>

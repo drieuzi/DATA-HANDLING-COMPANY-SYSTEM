@@ -34,6 +34,47 @@ function createInitialFields(type, transaction) {
       };
 }
 
+function normalizeAmountInput(value) {
+  const cleaned = String(value || "").replaceAll(",", "").replace(/[^\d.]/g, "");
+  if (!cleaned) return "";
+  const decimalIndex = cleaned.indexOf(".");
+  const wholeSource = decimalIndex >= 0 ? cleaned.slice(0, decimalIndex) : cleaned;
+  const fractionSource = decimalIndex >= 0
+    ? cleaned.slice(decimalIndex + 1).replaceAll(".", "").slice(0, 2)
+    : "";
+  const whole = wholeSource.replace(/^0+(?=\d)/, "") || "0";
+  return decimalIndex >= 0 ? `${whole}.${fractionSource}` : whole;
+}
+
+function formatAmountInput(value) {
+  if (value === "" || value === null || value === undefined) return "";
+  const [wholeSource = "0", fractionSource = ""] = String(value).split(".");
+  const whole = (wholeSource || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${whole}.${fractionSource.slice(0, 2).padEnd(2, "0")}`;
+}
+
+function restoreAmountCaret(input, beforeCaret) {
+  const formatted = input.value;
+  const decimalIndex = formatted.indexOf(".");
+  const sourceDecimalIndex = beforeCaret.indexOf(".");
+  let position = 0;
+
+  if (sourceDecimalIndex >= 0) {
+    const fractionDigits = beforeCaret.slice(sourceDecimalIndex + 1).replace(/\D/g, "").length;
+    position = decimalIndex + 1 + Math.min(fractionDigits, 2);
+  } else {
+    const wholeDigits = beforeCaret.replace(/\D/g, "").length;
+    let seen = 0;
+    position = 0;
+    while (position < decimalIndex && seen < wholeDigits) {
+      if (/\d/.test(formatted[position])) seen += 1;
+      position += 1;
+    }
+  }
+
+  input.setSelectionRange(position, position);
+}
+
 export default function TransactionEditorDialog({
   isOpen,
   type,
@@ -43,6 +84,7 @@ export default function TransactionEditorDialog({
   onClose
 }) {
   const dialogRef = useRef(null);
+  const amountInputRef = useRef(null);
   const [fields, setFields] = useState(() => createInitialFields(type, transaction));
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -63,6 +105,23 @@ export default function TransactionEditorDialog({
   function updateField(event) {
     const { name, value } = event.target;
     setFields((current) => ({ ...current, [name]: value }));
+  }
+
+  function updateAmount(event) {
+    const input = event.target;
+    const beforeCaret = input.value.slice(0, input.selectionStart ?? input.value.length);
+    const amount = normalizeAmountInput(input.value);
+    setFields((current) => ({ ...current, amount }));
+    window.requestAnimationFrame(() => {
+      if (amountInputRef.current) restoreAmountCaret(amountInputRef.current, beforeCaret);
+    });
+  }
+
+  function handleAmountKeyDown(event) {
+    if (event.key !== "." || !event.currentTarget.value.includes(".")) return;
+    event.preventDefault();
+    const decimalIndex = event.currentTarget.value.indexOf(".");
+    event.currentTarget.setSelectionRange(decimalIndex + 1, decimalIndex + 1);
   }
 
   async function handleSubmit(event) {
@@ -86,7 +145,7 @@ export default function TransactionEditorDialog({
         tinNumber: fields.tinNumber.trim(),
         collectionReceipt: isSupplier ? undefined : fields.collectionReceipt?.trim() || "—",
         paymentDate: fields.paymentDate || (isSupplier ? "" : "—"),
-        amount,
+        amount: amount.toFixed(2),
         balance,
         attachmentName: fields.attachmentName || ""
       });
@@ -127,7 +186,21 @@ export default function TransactionEditorDialog({
 
           <label>
             Amount
-            <input type="number" min="0.01" step="0.01" name="amount" value={fields.amount} onChange={updateField} required />
+            <span className="currency-amount-input">
+              <span className="currency-amount-input__prefix" aria-hidden="true">₱</span>
+              <input
+                ref={amountInputRef}
+                type="text"
+                inputMode="decimal"
+                name="amount"
+                value={formatAmountInput(fields.amount)}
+                onChange={updateAmount}
+                onKeyDown={handleAmountKeyDown}
+                placeholder="0.00"
+                aria-label="Transaction amount in Philippine pesos"
+                required
+              />
+            </span>
           </label>
 
           <label>

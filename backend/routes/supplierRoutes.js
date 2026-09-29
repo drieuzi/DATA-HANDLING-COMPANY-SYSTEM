@@ -2,7 +2,8 @@ const express = require("express");
 const {
   createSupplier, createTransaction, deleteSupplier, deleteTransaction,
   getSupplier, getTransaction, listSuppliers, listTransactions,
-  permanentlyDeleteSupplier, restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
+  permanentlyDeleteSupplier, permanentlyDeleteTransaction,
+  restoreSupplier, restoreTransaction, updateSupplier, updateTransaction
 } = require("../controllers/suppliercontroller");
 const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 
@@ -23,5 +24,6 @@ router.post("/transactions", createTransaction);
 router.patch("/transactions/:id", requireStaff, updateTransaction);
 router.delete("/transactions/:id", deleteTransaction);
 router.patch("/transactions/:id/restore", requireAdmin, restoreTransaction);
+router.delete("/transactions/:id/permanent", requireAdmin, permanentlyDeleteTransaction);
 
 module.exports = router;
