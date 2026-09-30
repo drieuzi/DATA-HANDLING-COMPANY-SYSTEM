@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import OutsideServiceEditorDialog from "../components/OutsideServiceEditorDialog.jsx";
+import OtherExpensesReportPage from "./OtherExpensesReportPage.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
-import { createFileReport, exportFileReportToPdf, reportTotal } from "../utils/reportExport.js";
 
 function monthKey(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date.slice(0, 7) : "";
@@ -33,8 +33,7 @@ export default function OutsideServicesPage({
   const [editing, setEditing] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [message, setMessage] = useState("");
-  const [previewTemplate, setPreviewTemplate] = useState("bir");
-  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const months = useMemo(() => [...new Set(services.map((item) => monthKey(item.date)).filter(Boolean))]
     .sort().reverse(), [services]);
@@ -49,10 +48,6 @@ export default function OutsideServicesPage({
 
   const total = rows.reduce((sum, service) => sum + Number(service.amount || 0), 0);
   const dateRange = selectedMonthRange(selectedMonth);
-  const previewReport = useMemo(() => createFileReport({
-    source: "other_expenses", template: previewTemplate, status: "All",
-    from: "", to: "", clients: [], suppliers: [], outsideServices: rows
-  }), [previewTemplate, rows]);
   const canEdit = user.role === "user";
   const canDelete = user.role === "admin";
 
@@ -103,27 +98,15 @@ export default function OutsideServicesPage({
     catch (error) { setMessage(error.message); }
   }
 
-  async function downloadReport() {
-    if (!previewReport?.rows.length) return setMessage("There are no filtered records to export.");
-    setDownloadingReport(true);
-    setMessage("");
-    try {
-      await onRecordExport?.({
-        reportType: "other_expenses", format: "pdf", template: previewTemplate,
-        filterStatus: "All", from: dateRange.from || null, to: dateRange.to || null,
-        recordCount: previewReport.rows.length
-      });
-      await exportFileReportToPdf(previewReport, {
-        ...dateRange, source: "other_expenses", template: previewTemplate,
-        status: "All", generatedBy: user.fullName || user.username
-      });
-      setMessage(`${previewReport.templateTitle} downloaded successfully.`);
-    } catch (error) {
-      setMessage(error.message || "The report could not be downloaded.");
-    } finally {
-      setDownloadingReport(false);
-    }
-  }
+  if (reportOpen) return (
+    <OtherExpensesReportPage
+      user={user}
+      rows={rows}
+      dateRange={dateRange}
+      onBack={() => setReportOpen(false)}
+      onRecordExport={onRecordExport}
+    />
+  );
 
   return (
     <div className="app-page outside-services-page">
@@ -141,7 +124,7 @@ export default function OutsideServicesPage({
         <section className="financial-records-card outside-services-card" aria-labelledby="outsideServicesTitle">
           <div className="financial-records-heading">
             <div><p>Monthly expense records</p><h2 id="outsideServicesTitle">Other Expenses</h2></div>
-            <span>{rows.length} record(s) · {formatCurrency(total)}</span>
+            <button className="secondary-action outside-services-report-link" type="button" onClick={() => setReportOpen(true)}>Preview &amp; Download</button>
           </div>
 
           <div className="records-toolbar outside-services-toolbar">
@@ -208,44 +191,6 @@ export default function OutsideServicesPage({
           </div>
         </section>
 
-        <section className="report-export-card outside-services-report-card" aria-labelledby="otherExpensesReportTitle">
-          <div className="report-export-heading">
-            <div><p>Other expense records</p><h2 id="otherExpensesReportTitle">Report Preview</h2></div>
-            <span>{previewReport.rows.length} record(s) in preview</span>
-          </div>
-
-          <div className="report-template-picker" aria-label="Other Expenses report format">
-            <button className={previewTemplate === "bir" ? "is-selected" : ""} type="button" onClick={() => setPreviewTemplate("bir")}>BIR Report</button>
-            <button className={previewTemplate === "office" ? "is-selected" : ""} type="button" onClick={() => setPreviewTemplate("office")}>Office Report</button>
-          </div>
-
-          <div className="report-export-summary outside-services-report-summary">
-            <div><span>Preview format</span><strong>{previewReport.templateTitle}</strong></div>
-            <div><span>Report</span><strong>Other Expenses Report</strong></div>
-            <div><span>Report total</span><strong>{formatCurrency(reportTotal(previewReport))}</strong></div>
-          </div>
-
-          <div className="report-preview-sheet">
-            <div className="report-preview-company">
-              <strong>ILLUMINUX GENERAL MERCH CO.</strong>
-              <span>Blk. 4, Queenstown 1 Heights, Brgy. San Luis, Antipolo City</span>
-              <h2>{previewReport.templateTitle} — Other Expenses Report</h2>
-            </div>
-            <div className="financial-table-wrapper">
-              <table className="financial-record-table report-preview-table outside-services-report-table">
-                <thead><tr>{previewReport.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-                <tbody>{previewReport.rows.length ? previewReport.rows.map((row, index) => (
-                  <tr key={`${previewTemplate}-${index}`}>{previewReport.columns.map((column) => <td key={column.key}>{column.type === "money" ? formatCurrency(row[column.key]) : row[column.key]}</td>)}</tr>
-                )) : <tr><td className="financial-records-empty" colSpan={previewReport.columns.length}>No filtered records are available.</td></tr>}</tbody>
-                {previewReport.rows.length > 0 && <tfoot><tr><th colSpan={previewReport.columns.length - 1}>Total</th><th>{formatCurrency(reportTotal(previewReport))}</th></tr></tfoot>}
-              </table>
-            </div>
-          </div>
-
-          <div className="report-export-actions">
-            <button className="primary-action" type="button" disabled={downloadingReport || !previewReport.rows.length} onClick={downloadReport}>{downloadingReport ? "Creating PDF…" : "Download PDF"}</button>
-          </div>
-        </section>
       </main>
 
       <OutsideServiceEditorDialog

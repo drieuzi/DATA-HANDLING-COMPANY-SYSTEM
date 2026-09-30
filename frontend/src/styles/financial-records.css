@@ -43,6 +43,22 @@
   font-weight: 800;
 }
 
+.financial-records-heading__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.financial-records-heading__actions > span {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.financial-records-heading__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .financial-table-wrapper {
   overflow-x: auto;
 }
@@ -86,6 +102,60 @@
   font-weight: 800;
 }
 
+.office-report-dialog {
+  width: min(1180px, calc(100% - 28px));
+  max-height: calc(100vh - 28px);
+  padding: 0;
+  overflow: auto;
+  border: 2px solid var(--black);
+  border-radius: 24px;
+  background: var(--white);
+  color: var(--black);
+  box-shadow: 0 24px 70px var(--shadow-color-strong);
+}
+
+.office-report-dialog::backdrop { background: var(--overlay); }
+
+.office-report-dialog__header,
+.office-report-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
+  background: var(--peach-strong);
+}
+
+.office-report-dialog__header p,
+.office-report-dialog__header h2,
+.office-report-dialog__footer p { margin: 0; }
+.office-report-dialog__header p { font-size: .68rem; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.office-report-dialog__header > button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--white); color: var(--black); font-size: 1.5rem; cursor: pointer; }
+.office-report-dialog__footer p { color: var(--red); font-size: .78rem; font-weight: 800; }
+.office-report-dialog__footer > div { display: flex; gap: 9px; }
+
+.office-report-preview {
+  margin: 22px;
+  padding: 24px;
+  border: 1px solid var(--black);
+  background: #fff;
+  color: #080808;
+}
+
+.office-report-preview header { display: grid; justify-items: center; text-align: center; }
+.office-report-preview header strong { font-size: 1.18rem; letter-spacing: .08em; }
+.office-report-preview header span { margin-top: 3px; font-size: .72rem; }
+.office-report-preview header h3 { margin: 10px 0 0; font-size: 1rem; }
+.office-report-meta { display: flex; justify-content: space-between; gap: 18px; margin: 18px 0 8px; font-size: .7rem; }
+.office-report-table-wrapper { overflow-x: auto; }
+.office-report-preview table { width: 100%; min-width: 850px; border-collapse: collapse; font-size: .72rem; }
+.office-report-preview th,
+.office-report-preview td { padding: 8px 7px; border: 1px solid #080808; text-align: left; }
+.office-report-preview th { background: #ffdea4; text-align: center; }
+.office-report-preview td:nth-last-child(2),
+.office-report-preview td:nth-last-child(3) { text-align: right; }
+.office-report-totals { display: flex; justify-content: flex-end; gap: 26px; margin-top: 12px; font-size: .78rem; font-weight: 900; }
+
 @media (max-width: 560px) {
   .financial-records-main {
     width: min(100% - 24px, 520px);
@@ -102,4 +172,16 @@
     gap: 7px;
     padding: 20px;
   }
+
+  .financial-records-heading__actions,
+  .office-report-dialog__footer,
+  .office-report-meta,
+  .office-report-totals {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .office-report-dialog__footer > div { width: 100%; }
+  .office-report-dialog__footer button { flex: 1; }
+  .office-report-preview { margin: 10px; padding: 13px; }
 }

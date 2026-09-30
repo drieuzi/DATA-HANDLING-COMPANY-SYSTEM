@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import TrackRecordHeader from "./TrackRecordHeader.jsx";
+import OfficeReportDialog from "./OfficeReportDialog.jsx";
 
 export default function FinancialRecordsTable({
   title, columns, rows, onBack, onEdit, onDelete,
   canEdit = () => true, canDelete = () => false, renderActions, embedded = false,
-  searchPlaceholder = "Search company, P.O., S.I., voucher…"
+  searchPlaceholder = "Search company, P.O., S.I., voucher…",
+  officeReportTitle,
+  generatedBy
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
+  const [reportOpen, setReportOpen] = useState(false);
   const sectionTitle = title.replace(/ Track Records$/i, "");
   const filteredRows = useMemo(() => rows.filter((row) => {
     const matchesStatus = status === "All" || row.billingStatus === status;
@@ -17,7 +21,13 @@ export default function FinancialRecordsTable({
 
   const recordsCard = (
     <section className="financial-records-card" aria-label={title}>
-          <div className="financial-records-heading"><div><p>Company records</p><h2>{sectionTitle} Transactions</h2></div><span>{filteredRows.length} record(s)</span></div>
+          <div className="financial-records-heading">
+            <div><p>Company records</p><h2>{sectionTitle} Transactions</h2></div>
+            <div className="financial-records-heading__actions">
+              <span>{filteredRows.length} record(s)</span>
+              {officeReportTitle && <button className="secondary-action" type="button" disabled={!filteredRows.length} onClick={() => setReportOpen(true)}>Preview Office Report</button>}
+            </div>
+          </div>
           <div className="records-toolbar">
             <input type="search" placeholder={searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
             <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Not Paid</option></select>
@@ -30,7 +40,18 @@ export default function FinancialRecordsTable({
     </section>
   );
 
-  if (embedded) return recordsCard;
+  const reportDialog = officeReportTitle ? (
+    <OfficeReportDialog
+      isOpen={reportOpen}
+      title={officeReportTitle}
+      columns={columns}
+      rows={filteredRows}
+      generatedBy={generatedBy}
+      onClose={() => setReportOpen(false)}
+    />
+  ) : null;
+
+  if (embedded) return <>{recordsCard}{reportDialog}</>;
 
   return (
     <div className="app-page financial-records-page">
@@ -38,6 +59,7 @@ export default function FinancialRecordsTable({
       <main className="financial-records-main">
         {recordsCard}
       </main>
+      {reportDialog}
     </div>
   );
 }

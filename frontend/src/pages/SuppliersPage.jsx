@@ -69,6 +69,7 @@ export default function SuppliersPage({
           <div id="supplier-payables-panel" role="tabpanel" aria-labelledby="supplier-payables-tab">
             <PayablesPage
               suppliers={suppliers.filter((supplier) => !supplier.deletedAt)}
+              user={user}
               onSaveTransaction={onSaveTransaction}
               onDeleteTransaction={onDeleteTransaction}
               isAdmin={isAdmin}

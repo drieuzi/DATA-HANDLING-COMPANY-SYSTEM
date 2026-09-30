@@ -360,7 +360,8 @@ async function updateTransaction(request, response, next) {
       `UPDATE supplier_transactions SET
          voucher_date = $1, payment_date = $2, sales_invoice_number = $3,
          purchase_order_number = $4, cheque_date = $5,
-         amount = $6, tin_number = $7, balance = $6 - $8
+         amount = $6, tin_number = $7,
+         balance = $6::NUMERIC - $8::NUMERIC
        WHERE id = $9 AND deleted_at IS NULL
        RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]

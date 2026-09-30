@@ -70,6 +70,7 @@ export default function ClientsPage({
           <div id="client-receivables-panel" role="tabpanel" aria-labelledby="client-receivables-tab">
             <ReceivablesPage
               clients={clients.filter((client) => !client.deletedAt)}
+              user={user}
               onSaveTransaction={onSaveTransaction}
               onDeleteTransaction={onDeleteTransaction}
               onReceivePayment={onReceivePayment}

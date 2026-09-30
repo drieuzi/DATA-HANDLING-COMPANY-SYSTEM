@@ -28,6 +28,15 @@
   background: var(--peach-strong);
 }
 
+.outside-services-report-link {
+  white-space: nowrap;
+}
+
+.outside-services-report-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 var(--black);
+}
+
 .outside-services-toolbar {
   grid-template-columns: minmax(260px, 1fr) minmax(190px, 260px);
   border-bottom: 2px solid var(--black);
@@ -48,7 +57,7 @@
 }
 
 .outside-services-report-card {
-  margin-top: 24px;
+  margin-top: 0;
 }
 
 .outside-services-report-card .report-export-heading h2 {
@@ -61,6 +70,15 @@
 
 .outside-services-report-table {
   min-width: 900px;
+}
+
+.outside-services-report-message {
+  margin: 0;
+  padding: 0 24px 22px;
+  color: var(--red);
+  font-size: .8rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .outside-services-table th,

@@ -335,7 +335,7 @@ async function updateTransaction(request, response, next) {
          sales_invoice_number = $2, purchase_order_number = $3,
          collection_receipt_number = COALESCE($4, collection_receipt_number),
          cheque_date = COALESCE($5, cheque_date), amount = $6, tin_number = $7,
-         balance = $6 - $8
+         balance = $6::NUMERIC - $8::NUMERIC
        WHERE id = $9 AND deleted_at IS NULL RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]
     );
