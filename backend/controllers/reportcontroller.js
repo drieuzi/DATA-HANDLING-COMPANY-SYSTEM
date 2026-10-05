@@ -36,26 +36,31 @@ async function dashboard(request, response, next) {
         `SELECT COALESCE(SUM(amount), 0) AS current_month_expenses
          FROM payments
          WHERE reversed_at IS NULL
-           AND DATE_TRUNC('month', payment_date) = DATE_TRUNC('month', CURRENT_DATE)`
+           AND DATE_TRUNC('month', payment_date::TIMESTAMP)
+               = DATE_TRUNC('month', CURRENT_DATE::TIMESTAMP)`
       ),
       pool.query(
         `SELECT EXTRACT(MONTH FROM payment_date)::INTEGER AS month_number,
            COALESCE(SUM(amount), 0) AS total
          FROM payments
-         WHERE reversed_at IS NULL AND EXTRACT(YEAR FROM payment_date) = $1
+         WHERE reversed_at IS NULL
+           AND EXTRACT(YEAR FROM payment_date::TIMESTAMP)::INTEGER = $1::INTEGER
          GROUP BY month_number ORDER BY month_number`,
         [year]
       ),
       pool.query(
         `SELECT COALESCE(SUM(amount), 0) AS current_month_expenses
          FROM outside_services
-         WHERE DATE_TRUNC('month', service_date) = DATE_TRUNC('month', CURRENT_DATE)`
+         WHERE deleted_at IS NULL
+           AND DATE_TRUNC('month', service_date::TIMESTAMP)
+               = DATE_TRUNC('month', CURRENT_DATE::TIMESTAMP)`
       ),
       pool.query(
         `SELECT EXTRACT(MONTH FROM service_date)::INTEGER AS month_number,
            COALESCE(SUM(amount), 0) AS total
          FROM outside_services
-         WHERE EXTRACT(YEAR FROM service_date) = $1
+         WHERE deleted_at IS NULL
+           AND EXTRACT(YEAR FROM service_date::TIMESTAMP)::INTEGER = $1::INTEGER
          GROUP BY month_number ORDER BY month_number`,
         [year]
       ),

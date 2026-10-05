@@ -39,6 +39,7 @@ export default function OutsideServicesPage({
     .sort().reverse(), [services]);
 
   const rows = useMemo(() => services.filter((service) => {
+    if (service.deletedAt) return false;
     const matchesMonth = !selectedMonth || monthKey(service.date) === selectedMonth;
     const searchText = [service.payee, service.item, service.receiptInvoiceNumber,
       service.tinNumber].filter(Boolean).join(" ").toLowerCase();
@@ -48,9 +49,6 @@ export default function OutsideServicesPage({
 
   const total = rows.reduce((sum, service) => sum + Number(service.amount || 0), 0);
   const dateRange = selectedMonthRange(selectedMonth);
-  const canEdit = user.role === "user";
-  const canDelete = user.role === "admin";
-
   function openCreate() {
     setEditing(null);
     setDialogOpen(true);
@@ -62,9 +60,11 @@ export default function OutsideServicesPage({
   }
 
   async function remove(service) {
-    if (!window.confirm(`Delete other expense "${service.item}"? This will remove it from monthly analytics.`)) return;
+    const reason = window.prompt(`Reason for deleting the Other Expense "${service.item}":`);
+    if (!reason?.trim()) return;
+    if (!window.confirm(`Delete other expense "${service.item}"? It will disappear from active records and an Admin can restore or permanently delete it.`)) return;
     setMessage("");
-    try { await onDelete(service.id); }
+    try { await onDelete(service.id, reason.trim()); }
     catch (error) { setMessage(error.message); }
   }
 
@@ -115,7 +115,7 @@ export default function OutsideServicesPage({
         <PageBackButton label="Back to Dashboard" onClick={onBack} />
 
         <section className="management-toolbar outside-services-controls">
-          <span>{user.role === "admin" ? "Admin can add and delete records" : "User can add and edit records"}</span>
+          <span>Company staff can add, edit, delete, attach files, and export reports</span>
           <div className="outside-services-control-actions">
             <button className="primary-action" type="button" onClick={openCreate}>+ Add Other Expense</button>
           </div>
@@ -179,8 +179,8 @@ export default function OutsideServicesPage({
                     </td>
                     <td>
                       <div className="row-actions">
-                        {canEdit && <button type="button" onClick={() => openEdit(service)}>Edit</button>}
-                        {canDelete && <button className="danger-action" type="button" onClick={() => remove(service)}>Delete</button>}
+                        <button type="button" onClick={() => openEdit(service)}>Edit</button>
+                        <button className="danger-action" type="button" onClick={() => remove(service)}>Delete</button>
                       </div>
                     </td>
                   </tr>

@@ -12,6 +12,7 @@
     "db:verify": "npm --prefix backend run db:verify",
     "db:test-supplier": "npm --prefix backend run db:test-supplier",
     "db:test-client": "npm --prefix backend run db:test-client",
+    "set-primary-admin": "npm --prefix backend run set-primary-admin --",
     "create-admin": "npm --prefix backend run create-admin --",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"

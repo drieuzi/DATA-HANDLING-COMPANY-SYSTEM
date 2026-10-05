@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header.jsx";
 import DashboardCard from "../components/DashboardCard.jsx";
 import ExpensesChart from "../components/ExpensesChart.jsx";
-import { demoDashboardData } from "../data/demoDashboardData.js";
 import { getDashboardData } from "../services/dashboardApi.js";
 import {
   calculatePurchaseTotals,
+  createEmptyDashboardData,
   formatCurrency,
   normalizeDashboardData
 } from "../utils/dashboardCalculations.js";
@@ -25,7 +25,7 @@ export default function DashboardPage({
   voucherCount
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
-    normalizeDashboardData(demoDashboardData)
+    normalizeDashboardData(createEmptyDashboardData())
   );
   const [dataSource, setDataSource] = useState("loading");
   const [notice, setNotice] = useState("");
@@ -41,6 +41,7 @@ export default function DashboardPage({
       })
       .catch((error) => {
         if (!active) return;
+        setDashboardData(normalizeDashboardData(createEmptyDashboardData()));
         setDataSource("error");
         setNotice(error.message);
       });
@@ -65,12 +66,8 @@ export default function DashboardPage({
     <div className="app-page dashboard-page">
       <Header user={user} onLogout={onLogout} />
 
-      <main className="dashboard" aria-labelledby="dashboardTitle">
+      <main className="dashboard" aria-label="Dashboard">
         <div className="dashboard-heading">
-          <div>
-            <p className="dashboard-eyebrow">Company Management System</p>
-            <h1 id="dashboardTitle">Dashboard</h1>
-          </div>
           <span className={`data-badge data-badge--${dataSource}`}>
             {dataSource === "live"
               ? "Live data"
@@ -78,7 +75,7 @@ export default function DashboardPage({
                 ? "API error"
                 : dataSource === "loading"
                   ? "Loading"
-                  : "Demo data"}
+                  : "Unavailable"}
           </span>
         </div>
 
@@ -104,7 +101,7 @@ export default function DashboardPage({
               <strong>{formatCurrency(purchaseTotals.payablePurchases)}</strong>
             </div>
             <button className="analytics-total-card" type="button" onClick={onOpenOutsideServices}>
-              <span>Outside Services</span>
+              <span>Other Expenses</span>
               <strong>{formatCurrency(purchaseTotals.outsideServices)}</strong>
               <small>View records</small>
             </button>

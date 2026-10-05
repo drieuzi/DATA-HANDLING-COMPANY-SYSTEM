@@ -4,6 +4,7 @@ const pool = require("../config/db");
 
 const REQUIRED_TABLES = [
   "users",
+  "user_deletion_requests",
   "clients",
   "client_transactions",
   "client_payments",
@@ -68,7 +69,7 @@ async function verifyDatabase() {
      WHERE table_schema = 'public'
        AND table_name = ANY($1::TEXT[])
        AND column_name = 'restore_allowed'`,
-    [["suppliers", "supplier_transactions", "clients", "client_transactions", "vouchers"]]
+    [["suppliers", "supplier_transactions", "clients", "client_transactions", "vouchers", "outside_services"]]
   );
 
   const companyCascadeResult = await pool.query(
@@ -105,6 +106,20 @@ async function verifyDatabase() {
        )`
   );
 
+  const accountProtectionResult = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'users'
+       AND column_name IN (
+         'is_primary_admin', 'deleted_by', 'deleted_at',
+         'deletion_reason', 'restore_allowed'
+       )`
+  );
+
+  const primaryAdminResult = await pool.query(
+    "SELECT username, full_name FROM users WHERE is_primary_admin = TRUE"
+  );
+
   if (missingTables.length > 0) {
     throw new Error(`Missing required tables: ${missingTables.join(", ")}`);
   }
@@ -126,7 +141,7 @@ async function verifyDatabase() {
   if (!voucherCounterResult.rows[0]) {
     throw new Error("Voucher number series is not initialized");
   }
-  if (deletionPolicyResult.rows.length !== 5) {
+  if (deletionPolicyResult.rows.length !== 6) {
     throw new Error("Role-aware deletion policy fields are missing");
   }
   if (companyCascadeResult.rows.length !== 2) {
@@ -141,6 +156,9 @@ async function verifyDatabase() {
   if (outsideServiceAttachmentResult.rows.length !== 7) {
     throw new Error("Other expense BIR or attachment fields are missing");
   }
+  if (accountProtectionResult.rows.length !== 5) {
+    throw new Error("Protected account deletion fields are missing");
+  }
 
   console.log("Database verification passed.");
   console.log(`Tables: ${foundTables.join(", ")}`);
@@ -148,11 +166,15 @@ async function verifyDatabase() {
   console.log("Generated fields: supplier_transactions.billing_status, client_transactions.billing_status");
   console.log("Billing states: Not Paid or Paid; partial payments are blocked");
   console.log("Transaction tax fields: supplier and client TIN numbers are available");
-  console.log("Deletion policy: company deletions cascade to transactions; Admins can restore or make them permanently unrestorable");
+  console.log("Deletion policy: company and Other Expense deletions are recoverable; Admins can restore or permanently delete them");
   console.log("Supplier P.O. import: Excel attachment storage fields are available");
   console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
   console.log("Other expenses: BIR details, amount, date, and optional PDF/image attachment are available");
+  console.log("Account deletion: deactivation, Primary Admin approval, restoration, and permanent deletion are available");
+  console.log(primaryAdminResult.rows[0]
+    ? `Primary Admin: ${primaryAdminResult.rows[0].username} (${primaryAdminResult.rows[0].full_name})`
+    : "Primary Admin: not selected; run npm run set-primary-admin -- <username>");
   console.log(`Next voucher number: ${String(Number(voucherCounterResult.rows[0].current_value) + 1).padStart(6, "0")}`);
 }
 

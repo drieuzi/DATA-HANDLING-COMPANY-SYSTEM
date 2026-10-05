@@ -3,8 +3,14 @@ import Header from "../components/Header.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import {
   createUser,
+  deactivateUser,
+  listUserDeletionRequests,
   listUsers,
+  permanentlyDeleteUser,
+  requestAdminDeletion,
   resetUserPassword,
+  restoreUser,
+  reviewAdminDeletion,
   updateUser
 } from "../services/adminUsersApi.js";
 
@@ -12,8 +18,7 @@ const emptyAccount = {
   username: "",
   fullName: "",
   role: "user",
-  password: "",
-  isActive: true
+  password: ""
 };
 
 function formatDate(value) {
@@ -26,6 +31,7 @@ function formatDate(value) {
 
 export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
   const [users, setUsers] = useState([]);
+  const [deletionRequests, setDeletionRequests] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -43,7 +49,12 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
   async function loadUsers() {
     setLoading(true);
     try {
-      setUsers(await listUsers());
+      const [accounts, requests] = await Promise.all([
+        listUsers(),
+        listUserDeletionRequests()
+      ]);
+      setUsers(accounts);
+      setDeletionRequests(requests);
     } catch (error) {
       setMessage({ type: "error", text: error.message });
     } finally {
@@ -89,8 +100,7 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
       username: account.username,
       fullName: account.fullName,
       role: account.role,
-      password: "",
-      isActive: account.isActive
+      password: ""
     });
     setResetTarget(null);
     setMessage({ type: "", text: "" });
@@ -113,8 +123,7 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
         const updated = await updateUser(editingId, {
           username: fields.username.trim(),
           fullName: fields.fullName.trim(),
-          role: fields.role,
-          isActive: fields.isActive
+          role: fields.role
         });
         setUsers((current) => current.map((item) => String(item.id) === String(updated.id) ? updated : item));
         setMessage({ type: "success", text: "Account changes saved." });
@@ -154,6 +163,86 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function askDeletionReason(account, permanent = false) {
+    return window.prompt(
+      permanent
+        ? `Why should ${account.fullName} be permanently deleted?`
+        : `Why should ${account.fullName} be deactivated?`,
+      "Employment or access ended"
+    )?.trim();
+  }
+
+  async function handleDeactivate(account) {
+    const reason = askDeletionReason(account);
+    if (!reason) return;
+    setMessage({ type: "", text: "" });
+
+    try {
+      if (account.role === "admin" && !currentUser.isPrimaryAdmin) {
+        const confirmed = window.confirm(
+          `Send a request to the Primary Admin to delete ${account.fullName}'s Admin account?`
+        );
+        if (!confirmed) return;
+        setSaving(true);
+        const result = await requestAdminDeletion(account.id, reason);
+        setMessage({ type: "success", text: result.message });
+      } else {
+        const confirmed = window.confirm(
+          `Are you sure you want to delete ${account.fullName}'s account? The account will be deactivated and can be restored.`
+        );
+        if (!confirmed) return;
+        setSaving(true);
+        const result = await deactivateUser(account.id, reason);
+        setMessage({ type: "success", text: result.message });
+      }
+      await loadUsers();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally { setSaving(false); }
+  }
+
+  async function handleRestore(account) {
+    if (!window.confirm(`Restore ${account.fullName}'s account and allow login again?`)) return;
+    setSaving(true);
+    try {
+      const result = await restoreUser(account.id);
+      setMessage({ type: "success", text: result.message });
+      await loadUsers();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally { setSaving(false); }
+  }
+
+  async function handlePermanentDelete(account) {
+    const reason = askDeletionReason(account, true);
+    if (!reason) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete ${account.fullName}'s account? This cannot be undone. Business and audit records will remain, but their account association will be removed.`
+    );
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      const result = await permanentlyDeleteUser(account.id, reason);
+      setMessage({ type: "success", text: result.message });
+      await loadUsers();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally { setSaving(false); }
+  }
+
+  async function handleReview(request, decision) {
+    const verb = decision === "approve" ? "approve" : "reject";
+    if (!window.confirm(`${verb === "approve" ? "Approve" : "Reject"} the request to delete ${request.targetName}'s Admin account?`)) return;
+    setSaving(true);
+    try {
+      const result = await reviewAdminDeletion(request.id, decision);
+      setMessage({ type: "success", text: result.message });
+      await loadUsers();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally { setSaving(false); }
   }
 
   return (
@@ -219,12 +308,38 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
                         <strong>{account.fullName}</strong>
                         <span>@{account.username}{String(account.id) === String(currentUser.id) ? " · You" : ""}</span>
                       </td>
-                      <td><span className={`role-badge role-badge--${account.role}`}>{account.role}</span></td>
-                      <td><span className={`status-dot ${account.isActive ? "is-active" : "is-inactive"}`}>{account.isActive ? "Active" : "Inactive"}</span></td>
+                      <td>
+                        <span className={`role-badge role-badge--${account.role}`}>
+                          {account.isPrimaryAdmin ? "Primary Admin" : account.role}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-dot ${account.isActive ? "is-active" : "is-inactive"}`}>
+                          {account.isActive ? "Active" : "Deactivated"}
+                        </span>
+                      </td>
                       <td>{formatDate(account.lastLoginAt)}</td>
                       <td className="account-actions">
-                        <button type="button" onClick={() => startEdit(account)}>Edit</button>
-                        <button type="button" onClick={() => { setResetTarget(account); setNewPassword(""); setMessage({ type: "", text: "" }); }}>Reset Password</button>
+                        {account.isActive ? (
+                          <>
+                            <button type="button" onClick={() => startEdit(account)}>Edit</button>
+                            <button type="button" onClick={() => { setResetTarget(account); setNewPassword(""); setMessage({ type: "", text: "" }); }}>Reset Password</button>
+                            {String(account.id) !== String(currentUser.id) && !account.isPrimaryAdmin && (
+                              <button className="account-delete-button" type="button" disabled={saving} onClick={() => handleDeactivate(account)}>
+                                {account.role === "admin" && !currentUser.isPrimaryAdmin ? "Request Delete" : "Delete"}
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {(account.role === "user" || currentUser.isPrimaryAdmin) && (
+                              <button type="button" disabled={saving} onClick={() => handleRestore(account)}>Restore</button>
+                            )}
+                            {currentUser.isPrimaryAdmin && !account.isPrimaryAdmin && (
+                              <button className="account-delete-button" type="button" disabled={saving} onClick={() => handlePermanentDelete(account)}>Permanent Delete</button>
+                            )}
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -234,6 +349,35 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
                 </tbody>
               </table>
             </div>
+
+            {deletionRequests.length > 0 && (
+              <section className="admin-deletion-requests" aria-labelledby="deletionRequestsTitle">
+                <div>
+                  <p className="section-kicker">Protected Admin actions</p>
+                  <h3 id="deletionRequestsTitle">Admin Deletion Requests</h3>
+                </div>
+                <div className="admin-deletion-request-list">
+                  {deletionRequests.map((request) => (
+                    <article key={request.id} className={`admin-deletion-request is-${request.status.toLowerCase()}`}>
+                      <div>
+                        <strong>{request.targetName}</strong>
+                        <span>Requested by {request.requesterName} · {formatDate(request.requestedAt)}</span>
+                        <small>{request.reason}</small>
+                      </div>
+                      <div className="admin-deletion-request-actions">
+                        <span>{request.status}</span>
+                        {currentUser.isPrimaryAdmin && request.status === "Pending" && (
+                          <>
+                            <button type="button" disabled={saving} onClick={() => handleReview(request, "approve")}>Approve</button>
+                            <button className="account-delete-button" type="button" disabled={saving} onClick={() => handleReview(request, "reject")}>Reject</button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
 
           <aside className="account-editor" aria-labelledby="accountEditorTitle">
@@ -273,15 +417,9 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
                   Account role
                   <select name="role" value={fields.role} onChange={updateField}>
                     <option value="user">User — add, edit, and delete records</option>
-                    <option value="admin">Admin — add, delete, and manage access</option>
+                    <option value="admin" disabled={!currentUser.isPrimaryAdmin}>Admin — protected management access</option>
                   </select>
                 </label>
-                {editingId && (
-                  <label className="active-account-toggle">
-                    <input name="isActive" type="checkbox" checked={fields.isActive} onChange={updateField} />
-                    Account is active
-                  </label>
-                )}
                 <div className="editor-actions">
                   {editingId && <button className="secondary-action" type="button" onClick={startCreate}>Cancel</button>}
                   <button className="primary-action" type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save Changes" : "Create Account"}</button>

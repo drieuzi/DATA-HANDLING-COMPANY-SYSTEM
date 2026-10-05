@@ -23,6 +23,10 @@ function mapOutsideService(row) {
     hasAttachment: Boolean(row.attachment_path),
     createdBy: row.created_by ? String(row.created_by) : null,
     updatedBy: row.updated_by ? String(row.updated_by) : null,
+    deletedBy: row.deleted_by ? String(row.deleted_by) : null,
+    deletedAt: row.deleted_at,
+    deletionReason: row.deletion_reason || null,
+    restoreAllowed: row.restore_allowed !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -39,11 +43,14 @@ function serviceValues(body) {
   };
 }
 
-async function listOutsideServices(_request, response, next) {
+async function listOutsideServices(request, response, next) {
   try {
+    const includeDeleted = request.user.role === "admin" && request.query.includeDeleted === "true";
     const result = await pool.query(
       `SELECT * FROM outside_services
+       WHERE deleted_at IS NULL OR ($1::BOOLEAN AND restore_allowed = TRUE)
        ORDER BY service_date DESC, created_at DESC, id DESC`
+      , [includeDeleted]
     );
     response.json({ outsideServices: result.rows.map(mapOutsideService) });
   } catch (error) { next(error); }
@@ -88,7 +95,7 @@ async function updateOutsideService(request, response, next) {
     const values = serviceValues(request.body);
     await client.query("BEGIN");
     const existing = await client.query(
-      "SELECT * FROM outside_services WHERE id = $1 FOR UPDATE",
+      "SELECT * FROM outside_services WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
       [serviceId]
     );
     if (!existing.rows[0]) throw new HttpError(404, "Other expense record not found.");
@@ -103,7 +110,7 @@ async function updateOutsideService(request, response, next) {
            attachment_mime_type = CASE WHEN $7::boolean THEN $10 ELSE attachment_mime_type END,
            attachment_size = CASE WHEN $7::boolean THEN $11 ELSE attachment_size END,
            updated_by = $12
-       WHERE id = $13 RETURNING *`,
+       WHERE id = $13 AND deleted_at IS NULL RETURNING *`,
       [
         values.payee, values.item, values.receiptInvoiceNumber, values.tinNumber,
         values.amount, values.date, Boolean(request.file),
@@ -130,25 +137,98 @@ async function updateOutsideService(request, response, next) {
 
 async function deleteOutsideService(request, response, next) {
   const client = await pool.connect();
-  let attachmentPath = null;
   try {
     const serviceId = validate.id(request.params.id, "Other expense ID");
+    const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await client.query("BEGIN");
     const result = await client.query(
-      "DELETE FROM outside_services WHERE id = $1 RETURNING *",
-      [serviceId]
+      `UPDATE outside_services
+       SET deleted_at = NOW(), deleted_by = $1, deletion_reason = $2,
+           restore_allowed = TRUE, updated_by = $1
+       WHERE id = $3 AND deleted_at IS NULL
+       RETURNING *`,
+      [request.user.id, reason, serviceId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Other expense record not found.");
-    attachmentPath = result.rows[0].attachment_path;
     const deleted = mapOutsideService(result.rows[0]);
     await writeAudit(client, request, "OUTSIDE_SERVICE_DELETED", "outside_service", serviceId, {
       item: deleted.item,
       amount: deleted.amount,
-      date: deleted.date
+      date: deleted.date,
+      reason,
+      deletionMode: "restorable"
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Other expense moved to Admin Monitoring." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function restoreOutsideService(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const serviceId = validate.id(request.params.id, "Other expense ID");
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE outside_services
+       SET deleted_at = NULL, deleted_by = NULL, deletion_reason = NULL,
+           restore_allowed = TRUE, updated_by = $1
+       WHERE id = $2 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING *`,
+      [request.user.id, serviceId]
+    );
+    if (!result.rows[0]) throw new HttpError(404, "Restorable Other Expense record not found.");
+    await writeAudit(client, request, "OUTSIDE_SERVICE_RESTORED", "outside_service", serviceId, {
+      item: result.rows[0].item,
+      amount: Number(result.rows[0].amount),
+      date: result.rows[0].service_date
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Other expense restored.", outsideService: mapOutsideService(result.rows[0]) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function permanentlyDeleteOutsideService(request, response, next) {
+  const client = await pool.connect();
+  let attachmentPath = null;
+  try {
+    const serviceId = validate.id(request.params.id, "Other expense ID");
+    const confirmation = validate.text(request.body.confirmation, "Confirmation", { required: true, max: 20 });
+    const reason = validate.text(request.body.reason, "Permanent deletion reason", { required: true, max: 500 });
+    if (confirmation !== "DELETE") {
+      throw new HttpError(400, 'Type "DELETE" exactly to confirm permanent deletion.');
+    }
+
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT * FROM outside_services
+       WHERE id = $1 AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       FOR UPDATE`,
+      [serviceId]
+    );
+    if (!existing.rows[0]) throw new HttpError(404, "Restorable deleted Other Expense record not found.");
+    attachmentPath = existing.rows[0].attachment_path;
+
+    await client.query(
+      "DELETE FROM audit_logs WHERE entity_type = 'outside_service' AND entity_id = $1",
+      [serviceId]
+    );
+    await client.query("DELETE FROM outside_services WHERE id = $1", [serviceId]);
+    await writeAudit(client, request, "PERMANENT_PURGE", "outside_service", serviceId, {
+      item: existing.rows[0].item,
+      amount: Number(existing.rows[0].amount),
+      date: existing.rows[0].service_date,
+      reason,
+      status: "Unrestorable"
     });
     await client.query("COMMIT");
     if (attachmentPath) await removeStoredAttachment(attachmentPath).catch(() => {});
-    response.json({ message: "Other expense deleted. Audit history was kept." });
+    response.json({ message: "Other expense permanently deleted. A minimal audit entry was kept." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -156,11 +236,13 @@ async function deleteOutsideService(request, response, next) {
 }
 
 async function getOutsideServiceAttachment(request, response, next) {
+  const client = await pool.connect();
   try {
     const serviceId = validate.id(request.params.id, "Other expense ID");
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `SELECT attachment_path, attachment_original_name, attachment_mime_type
-       FROM outside_services WHERE id = $1`,
+       FROM outside_services WHERE id = $1 AND deleted_at IS NULL`,
       [serviceId]
     );
     const record = result.rows[0];
@@ -169,12 +251,25 @@ async function getOutsideServiceAttachment(request, response, next) {
 
     const absolutePath = resolveStoredPath(record.attachment_path);
     const safeName = record.attachment_original_name || "outside-service-attachment";
-    if (request.query.download === "1") return response.download(absolutePath, safeName);
+    const isDownload = request.query.download === "1";
+    await writeAudit(
+      client,
+      request,
+      isDownload ? "OUTSIDE_SERVICE_ATTACHMENT_DOWNLOADED" : "OUTSIDE_SERVICE_ATTACHMENT_VIEWED",
+      "outside_service",
+      serviceId,
+      { attachmentName: safeName }
+    );
+    await client.query("COMMIT");
+    if (isDownload) return response.download(absolutePath, safeName);
 
     response.type(record.attachment_mime_type || "application/octet-stream");
     response.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(safeName)}`);
     response.sendFile(absolutePath);
-  } catch (error) { next(error); }
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
 }
 
 async function replaceOutsideServiceAttachment(request, response, next) {
@@ -185,7 +280,7 @@ async function replaceOutsideServiceAttachment(request, response, next) {
     if (!request.file) throw new HttpError(400, "Select a PDF, JPG, or PNG attachment.");
     await client.query("BEGIN");
     const existing = await client.query(
-      "SELECT attachment_path FROM outside_services WHERE id = $1 FOR UPDATE",
+      "SELECT attachment_path FROM outside_services WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
       [serviceId]
     );
     if (!existing.rows[0]) throw new HttpError(404, "Other expense record not found.");
@@ -194,7 +289,7 @@ async function replaceOutsideServiceAttachment(request, response, next) {
       `UPDATE outside_services
        SET attachment_path = $1, attachment_original_name = $2,
            attachment_mime_type = $3, attachment_size = $4, updated_by = $5
-       WHERE id = $6 RETURNING *`,
+       WHERE id = $6 AND deleted_at IS NULL RETURNING *`,
       [
         storedRelativePath(request.file), request.file.originalname, request.file.mimetype,
         request.file.size, request.user.id, serviceId
@@ -221,7 +316,7 @@ async function removeOutsideServiceAttachment(request, response, next) {
     await client.query("BEGIN");
     const existing = await client.query(
       `SELECT attachment_path, attachment_original_name
-       FROM outside_services WHERE id = $1 FOR UPDATE`,
+       FROM outside_services WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
       [serviceId]
     );
     if (!existing.rows[0]) throw new HttpError(404, "Other expense record not found.");
@@ -233,7 +328,7 @@ async function removeOutsideServiceAttachment(request, response, next) {
       `UPDATE outside_services
        SET attachment_path = NULL, attachment_original_name = NULL,
            attachment_mime_type = NULL, attachment_size = NULL, updated_by = $1
-       WHERE id = $2
+       WHERE id = $2 AND deleted_at IS NULL
        RETURNING *`,
       [request.user.id, serviceId]
     );
@@ -254,7 +349,9 @@ module.exports = {
   deleteOutsideService,
   getOutsideServiceAttachment,
   listOutsideServices,
+  permanentlyDeleteOutsideService,
   removeOutsideServiceAttachment,
   replaceOutsideServiceAttachment,
+  restoreOutsideService,
   updateOutsideService
 };

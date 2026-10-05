@@ -9,7 +9,8 @@ function publicUser(user) {
     id: user.id,
     username: user.username,
     fullName: user.full_name,
-    role: user.role
+    role: user.role,
+    isPrimaryAdmin: user.is_primary_admin === true
   };
 }
 
@@ -26,7 +27,7 @@ async function login(request, response, next) {
     }
 
     const result = await client.query(
-      `SELECT id, username, full_name, password_hash, role, is_active, token_version
+      `SELECT id, username, full_name, password_hash, role, is_active, is_primary_admin, token_version
        FROM users
        WHERE LOWER(username) = $1
        LIMIT 1`,
@@ -70,13 +71,26 @@ async function login(request, response, next) {
   }
 }
 
-function logout(_request, response) {
+async function logout(request, response, next) {
   response.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production"
   });
-  response.status(204).end();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await writeAudit(client, request, "AUTH_LOGOUT", "user", request.user.id, {
+      username: request.user.username
+    });
+    await client.query("COMMIT");
+    response.status(204).end();
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
 }
 
 function getCurrentUser(request, response) {

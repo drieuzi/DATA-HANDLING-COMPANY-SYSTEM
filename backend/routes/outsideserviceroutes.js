@@ -4,11 +4,13 @@ const {
   deleteOutsideService,
   getOutsideServiceAttachment,
   listOutsideServices,
+  permanentlyDeleteOutsideService,
   removeOutsideServiceAttachment,
   replaceOutsideServiceAttachment,
+  restoreOutsideService,
   updateOutsideService
 } = require("../controllers/outsideservicecontroller");
-const { requireAdmin, requireAuth, requireStaff, requireUser } = require("../middleware/authmiddleware");
+const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 const { uploadOutsideServiceAttachment } = require("../middleware/outsideserviceattachmentmiddleware");
 
 const router = express.Router();
@@ -19,7 +21,9 @@ router.post("/", requireStaff, uploadOutsideServiceAttachment, createOutsideServ
 router.get("/:id/attachment", requireStaff, getOutsideServiceAttachment);
 router.put("/:id/attachment", requireStaff, uploadOutsideServiceAttachment, replaceOutsideServiceAttachment);
 router.delete("/:id/attachment", requireStaff, removeOutsideServiceAttachment);
-router.patch("/:id", requireUser, uploadOutsideServiceAttachment, updateOutsideService);
-router.delete("/:id", requireAdmin, deleteOutsideService);
+router.patch("/:id/restore", requireAdmin, restoreOutsideService);
+router.delete("/:id/permanent", requireAdmin, permanentlyDeleteOutsideService);
+router.patch("/:id", requireStaff, uploadOutsideServiceAttachment, updateOutsideService);
+router.delete("/:id", requireStaff, deleteOutsideService);
 
 module.exports = router;

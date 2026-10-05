@@ -55,6 +55,7 @@ npm run db:test-client
 
 ```bash
 npm run create-admin -- admin "ChangeThisPassword123!" "System Administrator"
+npm run set-primary-admin -- admin
 ```
 
 6. Start the backend and frontend together:
@@ -71,7 +72,9 @@ There is intentionally no public Sign Up page because the system is company-excl
 
 **Dashboard → Manage User Accounts → + Add Account**
 
-The Admin can create either an `Admin` or `User`, change roles, activate/deactivate accounts, and reset passwords. Passwords are hashed with bcrypt and never stored as plain text.
+The selected Primary Admin can create either an `Admin` or `User` and control protected Admin-account actions. Any Admin can edit accounts, reset eligible passwords, and deactivate a normal User after confirmation. Passwords are hashed with bcrypt and never stored as plain text.
+
+Normal User deletion first deactivates and hides the account while preserving its record associations. A Primary Admin may restore it or permanently delete it. Permanent deletion keeps business and audit records but clears their foreign-key association to the removed account. A co-Admin cannot directly delete another Admin: the co-Admin submits a deletion request, and the Primary Admin approves or rejects it. Self-deletion, Primary Admin deletion, and deletion of the last active Admin are blocked.
 
 ## Employee and Admin data control
 
@@ -150,6 +153,7 @@ npm run db:init
 npm run db:verify
 npm run db:test-supplier
 npm run db:test-client
+npm run set-primary-admin -- <existing-admin-username>
 ```
 
 Client, Receivables, client payments, Total Sales, Supplier, Payables, Voucher, supplier payments, dashboard analytics, authentication, accounts, and audit activity now use PostgreSQL.

@@ -13,7 +13,7 @@ const loginLimiter = rateLimit({
 });
 
 router.post("/login", loginLimiter, login);
-router.post("/logout", logout);
+router.post("/logout", requireAuth, logout);
 router.get("/me", requireAuth, getCurrentUser);
 
 module.exports = router;

@@ -16,7 +16,8 @@ export default function ExpensesChart({ monthlyExpenses }) {
   const totals = monthlyExpenses.map(
     (item) => item.payables + item.outsideServices
   );
-  const maximum = Math.max(...totals, 1);
+  const maximum = Math.max(...totals, 0);
+  const scaleMaximum = Math.max(maximum, 1);
   const availableWidth = CHART_RIGHT - CHART_LEFT;
   const slotWidth = availableWidth / Math.max(monthlyExpenses.length, 1);
   const barWidth = Math.min(30, slotWidth * 0.58);
@@ -31,7 +32,7 @@ export default function ExpensesChart({ monthlyExpenses }) {
       >
         <title id="chartTitle">Monthly expenses analytics</title>
         <desc id="chartDescription">
-          One bar per month showing the combined total of supplier payments and outside services.
+          One bar per month showing the combined total of supplier payments and other expenses.
         </desc>
 
         <line
@@ -45,7 +46,7 @@ export default function ExpensesChart({ monthlyExpenses }) {
         {monthlyExpenses.map((item, index) => {
           const centerX = CHART_LEFT + slotWidth * index + slotWidth / 2;
           const total = item.payables + item.outsideServices;
-          const totalHeight = (total / maximum) * chartHeight;
+          const totalHeight = (total / scaleMaximum) * chartHeight;
           const totalY = CHART_BOTTOM - totalHeight;
 
           return (

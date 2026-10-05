@@ -19,6 +19,12 @@ function errorHandler(error, _request, response, _next) {
     if (error.constraint === "users_username_lower_unique") {
       return response.status(409).json({ message: "That username is already in use." });
     }
+    if (error.constraint === "users_one_primary_admin_unique") {
+      return response.status(409).json({ message: "A Primary Admin has already been selected." });
+    }
+    if (error.constraint === "user_deletion_requests_one_pending_target") {
+      return response.status(409).json({ message: "That Admin already has a pending deletion request." });
+    }
     if (error.constraint === "suppliers_name_lower_unique") {
       return response.status(409).json({ message: "That supplier name already exists." });
     }

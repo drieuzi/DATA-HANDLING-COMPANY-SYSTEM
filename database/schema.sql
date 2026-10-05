@@ -10,7 +10,12 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(10) NOT NULL DEFAULT 'user'
         CHECK (role IN ('admin', 'user')),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_primary_admin BOOLEAN NOT NULL DEFAULT FALSE,
     token_version INTEGER NOT NULL DEFAULT 0,
+    deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    deleted_at TIMESTAMPTZ,
+    deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_login_at TIMESTAMPTZ
@@ -18,7 +23,12 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Adds JWT revocation support when upgrading an existing database.
 ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS is_primary_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 DO $$
 BEGIN
@@ -35,8 +45,49 @@ BEGIN
 END;
 $$;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'users_primary_admin_valid'
+          AND conrelid = 'users'::REGCLASS
+    ) THEN
+        ALTER TABLE users
+            ADD CONSTRAINT users_primary_admin_valid
+            CHECK (NOT is_primary_admin OR (role = 'admin' AND is_active = TRUE));
+    END IF;
+END;
+$$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
     ON users (LOWER(username));
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_one_primary_admin_unique
+    ON users (is_primary_admin)
+    WHERE is_primary_admin = TRUE;
+
+CREATE INDEX IF NOT EXISTS users_deleted_at_index
+    ON users (deleted_at);
+
+CREATE TABLE IF NOT EXISTS user_deletion_requests (
+    id BIGSERIAL PRIMARY KEY,
+    target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    requested_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    status VARCHAR(12) NOT NULL DEFAULT 'Pending'
+        CHECK (status IN ('Pending', 'Approved', 'Rejected')),
+    reason TEXT NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ,
+    CHECK (BTRIM(reason) <> '')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_deletion_requests_one_pending_target
+    ON user_deletion_requests (target_user_id)
+    WHERE status = 'Pending' AND target_user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS user_deletion_requests_status_index
+    ON user_deletion_requests (status, requested_at DESC);
 
 CREATE TABLE IF NOT EXISTS suppliers (
     id BIGSERIAL PRIMARY KEY,
@@ -379,6 +430,10 @@ CREATE TABLE IF NOT EXISTS outside_services (
     attachment_size BIGINT,
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    deleted_at TIMESTAMPTZ,
+    deletion_reason TEXT,
+    restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT outside_services_item_required CHECK (BTRIM(item) <> ''),
@@ -395,7 +450,11 @@ ALTER TABLE outside_services
     ADD COLUMN IF NOT EXISTS attachment_path VARCHAR(500),
     ADD COLUMN IF NOT EXISTS attachment_original_name VARCHAR(255),
     ADD COLUMN IF NOT EXISTS attachment_mime_type VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS attachment_size BIGINT;
+    ADD COLUMN IF NOT EXISTS attachment_size BIGINT,
+    ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
+    ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Existing expense records and attachments remain intact. Only the address
 -- field, which is no longer part of Other Expenses, is removed.
@@ -404,6 +463,9 @@ ALTER TABLE outside_services
 
 CREATE INDEX IF NOT EXISTS outside_services_date_index
     ON outside_services (service_date DESC, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS outside_services_deleted_at_index
+    ON outside_services (deleted_at);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,

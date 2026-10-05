@@ -10,6 +10,7 @@
     "db:verify": "node scripts/verifyDatabase.js",
     "db:test-supplier": "node scripts/testSupplierSchema.js",
     "db:test-client": "node scripts/testClientSchema.js",
+    "set-primary-admin": "node scripts/setPrimaryAdmin.js",
     "create-admin": "node scripts/createAdmin.js"
   },
   "dependencies": {

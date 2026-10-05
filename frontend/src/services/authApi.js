@@ -13,7 +13,9 @@ export async function login(credentials) {
     return {
       id: "demo-user",
       username: credentials.username,
+      fullName: "Demo Administrator",
       role: "admin",
+      isPrimaryAdmin: true,
       demo: true
     };
   }

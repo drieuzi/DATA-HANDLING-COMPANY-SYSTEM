@@ -76,8 +76,8 @@
 }
 
 .client-status--paid {
-  background: var(--brown-status-soft);
-  color: var(--brown-status);
+  background: var(--status-accent-soft);
+  color: var(--status-accent);
 }
 
 .client-status--not-paid {

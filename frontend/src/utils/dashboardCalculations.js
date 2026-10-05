@@ -3,6 +3,26 @@ export function toNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function createEmptyDashboardData() {
+  return {
+    totalSales: 0,
+    receivables: 0,
+    payables: 0,
+    totalPurchases: 0,
+    currentMonthExpenses: 0,
+    paidTransactions: 0,
+    notPaidTransactions: 0,
+    voucherCounts: { total: 0, draft: 0, issued: 0, cancelled: 0, deleted: 0 },
+    monthlyExpenses: MONTHS.map((month) => ({
+      month,
+      payables: 0,
+      outsideServices: 0
+    }))
+  };
+}
+
 export function normalizeDashboardData(data) {
   return {
     totalSales: toNumber(data.totalSales),

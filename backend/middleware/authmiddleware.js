@@ -22,7 +22,7 @@ async function requireAuth(request, response, next) {
     }
 
     const result = await pool.query(
-      `SELECT id, username, full_name, role, is_active, token_version
+      `SELECT id, username, full_name, role, is_active, is_primary_admin, token_version
        FROM users WHERE id = $1 LIMIT 1`,
       [payload.sub]
     );
@@ -36,7 +36,8 @@ async function requireAuth(request, response, next) {
       id: account.id,
       username: account.username,
       fullName: account.full_name,
-      role: account.role
+      role: account.role,
+      isPrimaryAdmin: account.is_primary_admin === true
     };
     next();
   } catch (error) {

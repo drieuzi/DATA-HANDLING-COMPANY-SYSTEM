@@ -12,8 +12,8 @@ function serviceFormData(values) {
   return formData;
 }
 
-export async function listOutsideServices() {
-  return (await apiRequest("/outside-services")).outsideServices;
+export async function listOutsideServices(includeDeleted = false) {
+  return (await apiRequest(`/outside-services${includeDeleted ? "?includeDeleted=true" : ""}`)).outsideServices;
 }
 
 export async function createOutsideService(values) {
@@ -30,8 +30,22 @@ export async function updateOutsideService(id, values) {
   })).outsideService;
 }
 
-export async function deleteOutsideService(id) {
-  return apiRequest(`/outside-services/${id}`, { method: "DELETE" });
+export async function deleteOutsideService(id, reason) {
+  return apiRequest(`/outside-services/${id}`, {
+    method: "DELETE",
+    body: JSON.stringify({ reason })
+  });
+}
+
+export function restoreOutsideService(id) {
+  return apiRequest(`/outside-services/${id}/restore`, { method: "PATCH" });
+}
+
+export function permanentlyDeleteOutsideService(id, values) {
+  return apiRequest(`/outside-services/${id}/permanent`, {
+    method: "DELETE",
+    body: JSON.stringify(values)
+  });
 }
 
 export async function replaceOutsideServiceAttachment(id, attachment) {
