@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
@@ -28,8 +28,10 @@ import {
 import { listAuditLogs, recordReportExport } from "./services/auditApi.js";
 import {
   createClient, createClientTransaction, deleteClient, deleteClientTransaction,
+  confirmClientPaymentDeposit,
   listClients, permanentlyDeleteClient, permanentlyDeleteClientTransaction,
-  recordClientPayment, restoreClient, restoreClientTransaction, updateClient, updateClientTransaction
+  recordClientPayment, rescheduleClientPaymentCheque,
+  restoreClient, restoreClientTransaction, updateClient, updateClientTransaction
 } from "./services/clientApi.js";
 import {
   createOutsideService, deleteOutsideService, downloadOutsideServiceAttachment, listOutsideServices,
@@ -51,6 +53,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [selectedSupplierId, setSelectedSupplierId] = useState(null);
   const [selectedClientId, setSelectedClientId] = useState(null);
+  const [focusedClientTransactionId, setFocusedClientTransactionId] = useState(null);
   const [supplierSectionTab, setSupplierSectionTab] = useState("payables");
   const [clientSectionTab, setClientSectionTab] = useState("receivables");
   const [suppliers, setSuppliers] = useState(USE_DEMO_DATA ? demoSuppliers : []);
@@ -79,6 +82,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || USE_DEMO_DATA) return undefined;
+    const timer = window.setInterval(() => {
+      refreshBackendData(user).catch((error) => setAppMessage(error.message));
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [user]);
+
+  useEffect(() => {
     if (!appMessage) return undefined;
     const timer = window.setTimeout(() => setAppMessage(""), 5000);
     return () => window.clearTimeout(timer);
@@ -101,6 +112,17 @@ export default function App() {
 
   const selectedSupplier = suppliers.find((item) => item.id === selectedSupplierId);
   const selectedClient = clients.find((item) => item.id === selectedClientId);
+  const dueChequePayments = useMemo(() => clients.flatMap((client) =>
+    client.deletedAt ? [] : client.transactions
+      .filter((transaction) => !transaction.deletedAt && transaction.depositDue)
+      .map((transaction) => ({ ...transaction, clientName: client.name }))
+  ), [clients]);
+
+  function openDueChequeTransaction(transaction) {
+    setSelectedClientId(String(transaction.clientId || transaction.companyId));
+    setFocusedClientTransactionId(String(transaction.id));
+    setCurrentPage("client-details");
+  }
   function addLocalAudit(action, details, entityType = null, entityId = null) {
     setAuditLog((current) => [{
       id: createRecordId("activity"), action, details, entityType, entityId,
@@ -359,13 +381,49 @@ export default function App() {
       setClients((current) => current.map((client) => {
         const transactions = client.transactions.map((transaction) => {
           if (transaction.id !== transactionId) return transaction;
-          const balance = 0;
-          return { ...transaction, ...values, balance, billingStatus: calculateBillingStatus(transaction.amount, balance) };
+          return {
+            ...transaction,
+            ...values,
+            paymentId: createRecordId("client-payment"),
+            depositStatus: "Pending Deposit",
+            depositDue: values.chequeDate <= today(),
+            billingStatus: "Not Paid"
+          };
         });
         return { ...client, transactions, billingStatus: calculateCompanyStatus(transactions) };
       }));
     } else { await recordClientPayment(transactionId, values); await refreshBackendData(); }
-    setAppMessage("Client payment recorded and Receivables updated.");
+    setAppMessage("Client cheque recorded as Pending Deposit. Confirm it after the cheque date.");
+  }
+
+  async function confirmClientDeposit(paymentId) {
+    if (USE_DEMO_DATA) {
+      setClients((current) => current.map((client) => {
+        const transactions = client.transactions.map((transaction) => transaction.paymentId === paymentId
+          ? { ...transaction, balance: 0, billingStatus: "Paid", depositStatus: "Deposited", depositDue: false, paymentDate: transaction.chequeDate }
+          : transaction);
+        return { ...client, transactions, billingStatus: calculateCompanyStatus(transactions) };
+      }));
+    } else {
+      await confirmClientPaymentDeposit(paymentId);
+      await refreshBackendData();
+    }
+    setAppMessage("Cheque deposit confirmed. The client transaction is now Paid.");
+  }
+
+  async function rescheduleClientCheque(paymentId, chequeDate) {
+    if (USE_DEMO_DATA) {
+      setClients((current) => current.map((client) => ({
+        ...client,
+        transactions: client.transactions.map((transaction) => transaction.paymentId === paymentId
+          ? { ...transaction, chequeDate, depositDue: chequeDate <= today() }
+          : transaction)
+      })));
+    } else {
+      await rescheduleClientPaymentCheque(paymentId, chequeDate);
+      await refreshBackendData();
+    }
+    setAppMessage("Cheque date updated. The payment remains Pending Deposit.");
   }
 
   async function createVoucher(values) {
@@ -621,7 +679,7 @@ export default function App() {
   } else if (currentPage === "suppliers") {
     page = <SuppliersPage suppliers={suppliers} user={user} onBack={() => setCurrentPage("dashboard")} onSelectSupplier={(item) => { setSelectedSupplierId(item.id); setCurrentPage("supplier-details"); }} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} onRestoreSupplier={recoverSupplier} activeTab={supplierSectionTab} onTabChange={setSupplierSectionTab} />;
   } else if (currentPage === "clients") {
-    page = <ClientsPage clients={clients} user={user} onBack={() => setCurrentPage("dashboard")} onSelectClient={(item) => { setSelectedClientId(item.id); setCurrentPage("client-details"); }} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} activeTab={clientSectionTab} onTabChange={setClientSectionTab} />;
+    page = <ClientsPage clients={clients} user={user} onBack={() => setCurrentPage("dashboard")} onSelectClient={(item) => { setSelectedClientId(item.id); setCurrentPage("client-details"); }} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onReceivePayment={receiveClientPayment} onConfirmDeposit={confirmClientDeposit} onRescheduleCheque={rescheduleClientCheque} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} activeTab={clientSectionTab} onTabChange={setClientSectionTab} />;
   } else if (currentPage === "vouchers") {
     page = <VouchersPage user={user} suppliers={suppliers.filter((item) => !item.deletedAt)} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} onCreate={createVoucher} onEdit={editVoucher} onIssue={issueVoucher} onDelete={removeVoucher} />;
   } else if (currentPage === "total-sales") {
@@ -633,9 +691,9 @@ export default function App() {
   } else if (currentPage === "supplier-details" && selectedSupplier) {
     page = <SupplierDetailsPage supplier={selectedSupplier} user={user} onBack={() => setCurrentPage("suppliers")} onSaveTransaction={saveSupplierTransaction} onDeleteTransaction={removeSupplierTransaction} onRestoreTransaction={recoverSupplierTransaction} onSaveSupplier={saveSupplier} onDeleteSupplier={removeSupplier} onRestoreSupplier={recoverSupplier} />;
   } else if (currentPage === "client-details" && selectedClient) {
-    page = <ClientDetailsPage client={selectedClient} user={user} onBack={() => setCurrentPage("clients")} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onRestoreTransaction={recoverClientTransaction} onReceivePayment={receiveClientPayment} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} />;
+    page = <ClientDetailsPage client={selectedClient} user={user} focusTransactionId={focusedClientTransactionId} onFocusHandled={() => setFocusedClientTransactionId(null)} onBack={() => setCurrentPage("clients")} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onRestoreTransaction={recoverClientTransaction} onReceivePayment={receiveClientPayment} onConfirmDeposit={confirmClientDeposit} onRescheduleCheque={rescheduleClientCheque} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} />;
   } else {
-    page = <DashboardPage user={user} onLogout={handleLogout} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenOutsideServices={() => setCurrentPage("outside-services")} onOpenAdmin={() => setCurrentPage("admin-users")} onOpenMonitoring={() => setCurrentPage("admin-monitoring")} onOpenReports={() => setCurrentPage("file-report")} />;
+    page = <DashboardPage user={user} onLogout={handleLogout} dueChequePayments={dueChequePayments} voucherCount={vouchers.filter((item) => !item.deletedAt).length} onOpenDueCheque={openDueChequeTransaction} onOpenClients={() => { setClientSectionTab("receivables"); setCurrentPage("clients"); }} onOpenSuppliers={() => { setSupplierSectionTab("payables"); setCurrentPage("suppliers"); }} onOpenVouchers={() => setCurrentPage("vouchers")} onOpenSales={() => setCurrentPage("total-sales")} onOpenPurchases={() => setCurrentPage("total-purchases")} onOpenOutsideServices={() => setCurrentPage("outside-services")} onOpenAdmin={() => setCurrentPage("admin-users")} onOpenMonitoring={() => setCurrentPage("admin-monitoring")} onOpenReports={() => setCurrentPage("file-report")} />;
   }
 
   return <>{dataLoading && <div className="app-data-loading" role="status">Refreshing records…</div>}{appMessage && <div className="dashboard-notice" role="status">{appMessage}</div>}{page}</>;

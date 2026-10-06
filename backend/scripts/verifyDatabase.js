@@ -59,6 +59,22 @@ async function verifyDatabase() {
        AND column_name IN ('restore_allowed', 'permanently_deleted_by', 'permanently_deleted_at')`
   );
 
+  const voucherCascadeResult = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'vouchers'
+       AND column_name = 'deleted_with_transaction'`
+  );
+
+  const activePaymentIndexResult = await pool.query(
+    `SELECT indexname
+     FROM pg_indexes
+     WHERE schemaname = 'public'
+       AND tablename = 'payments'
+       AND indexname = 'payments_one_active_voucher_unique'
+       AND indexdef ILIKE '%WHERE (reversed_at IS NULL)%'`
+  );
+
   const voucherCounterResult = await pool.query(
     `SELECT current_value FROM system_counters WHERE counter_name = 'voucher_number'`
   );
@@ -86,6 +102,31 @@ async function verifyDatabase() {
      WHERE table_schema = 'public'
        AND table_name IN ('supplier_transactions', 'client_transactions')
        AND column_name = 'tin_number'`
+  );
+
+  const clientChequeWorkflowResult = await pool.query(
+    `SELECT table_name, column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND (
+         (table_name = 'client_transactions' AND column_name = 'collection_date')
+         OR
+         (table_name = 'client_payments' AND column_name IN (
+           'collection_date', 'cheque_date', 'payment_date',
+           'deposit_status', 'confirmed_by', 'confirmed_at'
+         ))
+       )`
+  );
+
+  const clientChequeIndexResult = await pool.query(
+    `SELECT indexname
+     FROM pg_indexes
+     WHERE schemaname = 'public'
+       AND tablename = 'client_payments'
+       AND indexname IN (
+         'client_payments_due_cheque_index',
+         'client_payments_one_current_transaction_unique'
+       )`
   );
 
   const supplierAttachmentResult = await pool.query(
@@ -138,6 +179,12 @@ async function verifyDatabase() {
   if (voucherDeletionResult.rows.length !== 3) {
     throw new Error("Voucher historical or permanent-deletion fields are missing");
   }
+  if (voucherCascadeResult.rows.length !== 1) {
+    throw new Error("Voucher transaction-deletion tracking field is missing");
+  }
+  if (activePaymentIndexResult.rows.length !== 1) {
+    throw new Error("Active voucher payment uniqueness rule is missing");
+  }
   if (!voucherCounterResult.rows[0]) {
     throw new Error("Voucher number series is not initialized");
   }
@@ -149,6 +196,12 @@ async function verifyDatabase() {
   }
   if (transactionTinResult.rows.length !== 2) {
     throw new Error("Supplier or client transaction TIN field is missing");
+  }
+  if (clientChequeWorkflowResult.rows.length !== 7) {
+    throw new Error("Client collection or pending-cheque fields are missing");
+  }
+  if (clientChequeIndexResult.rows.length !== 2) {
+    throw new Error("Client pending-cheque indexes are missing");
   }
   if (supplierAttachmentResult.rows.length !== 3) {
     throw new Error("Supplier transaction Excel attachment fields are missing");
@@ -166,10 +219,12 @@ async function verifyDatabase() {
   console.log("Generated fields: supplier_transactions.billing_status, client_transactions.billing_status");
   console.log("Billing states: Not Paid or Paid; partial payments are blocked");
   console.log("Transaction tax fields: supplier and client TIN numbers are available");
+  console.log("Client collections: received cheques remain Pending Deposit until manually confirmed on or after the cheque date");
   console.log("Deletion policy: company and Other Expense deletions are recoverable; Admins can restore or permanently delete them");
   console.log("Supplier P.O. import: Excel attachment storage fields are available");
   console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
+  console.log("Voucher lifecycle: linked vouchers follow supplier transaction deletion and restored vouchers can be reissued");
   console.log("Other expenses: BIR details, amount, date, and optional PDF/image attachment are available");
   console.log("Account deletion: deactivation, Primary Admin approval, restoration, and permanent deletion are available");
   console.log(primaryAdminResult.rows[0]

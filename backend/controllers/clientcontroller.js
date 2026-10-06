@@ -3,6 +3,18 @@ const { writeAudit } = require("../services/auditservice");
 const HttpError = require("../utils/httpError");
 const validate = require("../utils/validation");
 
+function dateKey(value) {
+  if (!value) return "";
+  const directMatch = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (directMatch) return directMatch[1];
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function mapTransaction(row) {
   return {
     id: String(row.id),
@@ -12,8 +24,12 @@ function mapTransaction(row) {
     purchaseOrder: row.purchase_order_number || "—",
     tinNumber: row.tin_number || "—",
     collectionReceipt: row.collection_receipt_number || "—",
+    collectionDate: row.payment_collection_date || row.collection_date || "—",
     paymentDate: row.payment_date || "—",
-    chequeDate: row.cheque_date || "—",
+    chequeDate: row.payment_cheque_date || row.cheque_date || "—",
+    paymentId: row.client_payment_id ? String(row.client_payment_id) : null,
+    depositStatus: row.deposit_status || (Number(row.balance) === 0 ? "Deposited" : "No Cheque"),
+    depositDue: row.deposit_due === true,
     amount: Number(row.amount),
     balance: Number(row.balance),
     billingStatus: row.billing_status,
@@ -68,9 +84,22 @@ async function loadClients(includeDeleted = false) {
       [includeDeleted]
     ),
     pool.query(
-      `SELECT * FROM client_transactions
-       WHERE deleted_at IS NULL OR ($1::BOOLEAN AND restore_allowed = TRUE)
-       ORDER BY transaction_date DESC, created_at DESC, id DESC`,
+      `SELECT ct.*,
+         cp.id AS client_payment_id,
+         cp.collection_date AS payment_collection_date,
+         cp.cheque_date AS payment_cheque_date,
+         cp.deposit_status,
+         (cp.deposit_status = 'Pending Deposit' AND cp.cheque_date <= CURRENT_DATE) AS deposit_due
+       FROM client_transactions ct
+       LEFT JOIN LATERAL (
+         SELECT id, collection_date, cheque_date, deposit_status
+         FROM client_payments
+         WHERE client_transaction_id = ct.id
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+       ) cp ON TRUE
+       WHERE ct.deleted_at IS NULL OR ($1::BOOLEAN AND ct.restore_allowed = TRUE)
+       ORDER BY ct.transaction_date DESC, ct.created_at DESC, ct.id DESC`,
       [includeDeleted]
     )
   ]);
@@ -323,12 +352,21 @@ async function updateTransaction(request, response, next) {
     const values = transactionValues(request.body);
     await client.query("BEGIN");
     const paidResult = await client.query(
-      "SELECT COALESCE(SUM(amount), 0) AS paid FROM client_payments WHERE client_transaction_id = $1",
+      `SELECT
+         COALESCE(SUM(amount) FILTER (WHERE deposit_status = 'Deposited'), 0) AS paid,
+         MAX(amount) FILTER (WHERE deposit_status = 'Pending Deposit') AS pending_amount
+       FROM client_payments WHERE client_transaction_id = $1`,
       [transactionId]
     );
     const paidAmount = Number(paidResult.rows[0].paid);
+    const pendingAmount = paidResult.rows[0].pending_amount == null
+      ? null
+      : Number(paidResult.rows[0].pending_amount);
     if (paidAmount > 0 && Number(values.amount) !== paidAmount) {
       throw new HttpError(409, "A paid transaction amount must remain equal to its completed payment.");
+    }
+    if (pendingAmount !== null && Number(values.amount) !== pendingAmount) {
+      throw new HttpError(409, "The transaction amount cannot change while its cheque is pending deposit.");
     }
     const result = await client.query(
       `UPDATE client_transactions SET transaction_date = $1,
@@ -456,9 +494,12 @@ async function addPayment(request, response, next) {
   try {
     const transactionId = validate.id(request.params.id, "Transaction ID");
     const paymentAmount = validate.money(request.body.amount, "Payment amount");
-    const paymentDate = validate.date(request.body.paymentDate, "Payment date", { required: true });
+    const collectionDate = validate.date(request.body.collectionDate, "Collection date", { required: true });
     const collectionReceipt = validate.text(request.body.collectionReceipt, "Collection receipt number", { max: 80 });
-    const chequeDate = validate.date(request.body.chequeDate, "Cheque date");
+    const chequeDate = validate.date(request.body.chequeDate, "Cheque date", { required: true });
+    if (chequeDate < collectionDate) {
+      throw new HttpError(400, "Cheque date cannot be earlier than the collection date.");
+    }
     await client.query("BEGIN");
     const locked = await client.query(
       `SELECT ct.* FROM client_transactions ct JOIN clients c ON c.id = ct.client_id
@@ -470,26 +511,176 @@ async function addPayment(request, response, next) {
     if (Number(paymentAmount) !== Number(transaction.balance)) {
       throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${Number(transaction.balance).toFixed(2)}.`);
     }
+    const existingPayment = await client.query(
+      `SELECT id, deposit_status FROM client_payments
+       WHERE client_transaction_id = $1
+         AND deposit_status IN ('Pending Deposit', 'Deposited')
+       FOR UPDATE`,
+      [transactionId]
+    );
+    if (existingPayment.rows[0]) {
+      throw new HttpError(409, existingPayment.rows[0].deposit_status === "Pending Deposit"
+        ? "This transaction already has a cheque pending deposit."
+        : "This transaction has already been paid.");
+    }
     const payment = await client.query(
       `INSERT INTO client_payments (
          client_transaction_id, client_id, collection_receipt_number,
-         payment_date, cheque_date, amount, recorded_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [transaction.id, transaction.client_id, collectionReceipt, paymentDate, chequeDate, paymentAmount, request.user.id]
+         collection_date, cheque_date, payment_date, deposit_status,
+         amount, recorded_by
+       ) VALUES ($1, $2, $3, $4, $5, NULL, 'Pending Deposit', $6, $7)
+       RETURNING *, (cheque_date <= CURRENT_DATE) AS deposit_due`,
+      [transaction.id, transaction.client_id, collectionReceipt, collectionDate,
+        chequeDate, paymentAmount, request.user.id]
     );
     const updated = await client.query(
-      `UPDATE client_transactions SET balance = balance - $1,
-         payment_date = $2,
-         collection_receipt_number = COALESCE($3, collection_receipt_number),
-         cheque_date = COALESCE($4, cheque_date)
-       WHERE id = $5 RETURNING *`,
-      [paymentAmount, paymentDate, collectionReceipt, chequeDate, transaction.id]
+      `UPDATE client_transactions SET collection_date = $1,
+         collection_receipt_number = COALESCE($2, collection_receipt_number),
+         cheque_date = $3
+       WHERE id = $4 RETURNING *`,
+      [collectionDate, collectionReceipt, chequeDate, transaction.id]
     );
-    await writeAudit(client, request, "CLIENT_PAYMENT_RECORDED", "client_payment", payment.rows[0].id, {
-      transactionId, paymentAmount, newBalance: updated.rows[0].balance, billingStatus: updated.rows[0].billing_status
+    await writeAudit(client, request, "CLIENT_CHEQUE_RECEIVED", "client_payment", payment.rows[0].id, {
+      transactionId,
+      paymentAmount,
+      collectionDate,
+      chequeDate,
+      depositStatus: "Pending Deposit",
+      billingStatus: updated.rows[0].billing_status
     });
     await client.query("COMMIT");
-    response.status(201).json({ transaction: mapTransaction(updated.rows[0]), payment: payment.rows[0] });
+    response.status(201).json({
+      transaction: mapTransaction({
+        ...updated.rows[0],
+        client_payment_id: payment.rows[0].id,
+        payment_collection_date: payment.rows[0].collection_date,
+        payment_cheque_date: payment.rows[0].cheque_date,
+        deposit_status: payment.rows[0].deposit_status,
+        deposit_due: payment.rows[0].deposit_due === true
+      }),
+      payment: payment.rows[0],
+      message: "Cheque recorded as Pending Deposit. The transaction remains Not Paid until deposit confirmation."
+    });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function confirmPaymentDeposit(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const paymentId = validate.id(request.params.paymentId, "Payment ID");
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT cp.*,
+         (cp.cheque_date <= CURRENT_DATE) AS deposit_due,
+         ct.balance, ct.deleted_at AS transaction_deleted_at,
+         c.deleted_at AS client_deleted_at
+       FROM client_payments cp
+       JOIN client_transactions ct ON ct.id = cp.client_transaction_id
+       JOIN clients c ON c.id = cp.client_id
+       WHERE cp.id = $1
+       FOR UPDATE OF cp, ct`,
+      [paymentId]
+    );
+    const payment = result.rows[0];
+    if (!payment || payment.transaction_deleted_at || payment.client_deleted_at) {
+      throw new HttpError(404, "Active pending client payment not found.");
+    }
+    if (payment.deposit_status !== "Pending Deposit") {
+      throw new HttpError(409, "This cheque has already been confirmed as deposited.");
+    }
+    const chequeDate = dateKey(payment.cheque_date);
+    if (!payment.deposit_due) {
+      throw new HttpError(409, `This cheque is scheduled for deposit on ${chequeDate}.`);
+    }
+    if (Number(payment.amount) !== Number(payment.balance)) {
+      throw new HttpError(409, "The pending cheque amount no longer matches the transaction balance.");
+    }
+    await client.query(
+      `UPDATE client_payments SET deposit_status = 'Deposited',
+         payment_date = cheque_date, confirmed_by = $1, confirmed_at = NOW()
+       WHERE id = $2`,
+      [request.user.id, paymentId]
+    );
+    const updated = await client.query(
+      `UPDATE client_transactions SET balance = 0,
+         collection_date = $1, payment_date = $2, cheque_date = $2,
+         collection_receipt_number = COALESCE($3, collection_receipt_number)
+       WHERE id = $4 RETURNING *`,
+      [payment.collection_date, payment.cheque_date, payment.collection_receipt_number,
+        payment.client_transaction_id]
+    );
+    await writeAudit(client, request, "CLIENT_DEPOSIT_CONFIRMED", "client_payment", paymentId, {
+      transactionId: String(payment.client_transaction_id),
+      amount: payment.amount,
+      collectionDate: payment.collection_date,
+      chequeDate,
+      depositStatus: "Deposited",
+      billingStatus: updated.rows[0].billing_status
+    });
+    await client.query("COMMIT");
+    response.json({
+      transaction: mapTransaction({
+        ...updated.rows[0],
+        client_payment_id: paymentId,
+        payment_collection_date: payment.collection_date,
+        payment_cheque_date: payment.cheque_date,
+        deposit_status: "Deposited",
+        deposit_due: false
+      }),
+      message: "Cheque deposit confirmed. The transaction is now Paid."
+    });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
+}
+
+async function reschedulePaymentCheque(request, response, next) {
+  const client = await pool.connect();
+  try {
+    const paymentId = validate.id(request.params.paymentId, "Payment ID");
+    const chequeDate = validate.date(request.body.chequeDate, "Cheque date", { required: true });
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT cp.*, ct.deleted_at AS transaction_deleted_at,
+         c.deleted_at AS client_deleted_at
+       FROM client_payments cp
+       JOIN client_transactions ct ON ct.id = cp.client_transaction_id
+       JOIN clients c ON c.id = cp.client_id
+       WHERE cp.id = $1
+       FOR UPDATE OF cp, ct`,
+      [paymentId]
+    );
+    const payment = result.rows[0];
+    if (!payment || payment.transaction_deleted_at || payment.client_deleted_at) {
+      throw new HttpError(404, "Active pending client payment not found.");
+    }
+    if (payment.deposit_status !== "Pending Deposit") {
+      throw new HttpError(409, "Only a Pending Deposit cheque can be rescheduled.");
+    }
+    const collectionDate = dateKey(payment.collection_date);
+    if (chequeDate < collectionDate) {
+      throw new HttpError(400, "Cheque date cannot be earlier than the collection date.");
+    }
+    await client.query(
+      "UPDATE client_payments SET cheque_date = $1 WHERE id = $2",
+      [chequeDate, paymentId]
+    );
+    await client.query(
+      "UPDATE client_transactions SET cheque_date = $1 WHERE id = $2",
+      [chequeDate, payment.client_transaction_id]
+    );
+    await writeAudit(client, request, "CLIENT_CHEQUE_RESCHEDULED", "client_payment", paymentId, {
+      transactionId: String(payment.client_transaction_id),
+      previousChequeDate: payment.cheque_date,
+      chequeDate,
+      depositStatus: "Pending Deposit"
+    });
+    await client.query("COMMIT");
+    response.json({ message: "Cheque date updated. The deposit remains pending." });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -500,16 +691,22 @@ async function paymentHistory(request, response, next) {
   try {
     const transactionId = validate.id(request.params.id, "Transaction ID");
     const result = await pool.query(
-      `SELECT id, amount, payment_date, collection_receipt_number,
-         cheque_date, recorded_by, created_at
+      `SELECT id, amount, collection_date, payment_date,
+         collection_receipt_number, cheque_date, deposit_status,
+         recorded_by, confirmed_by, confirmed_at, created_at,
+         (deposit_status = 'Pending Deposit' AND cheque_date <= CURRENT_DATE) AS deposit_due
        FROM client_payments WHERE client_transaction_id = $1
-       ORDER BY payment_date DESC, created_at DESC`,
+       ORDER BY created_at DESC, id DESC`,
       [transactionId]
     );
     response.json({ payments: result.rows.map((row) => ({
-      id: String(row.id), amount: Number(row.amount), paymentDate: row.payment_date,
+      id: String(row.id), amount: Number(row.amount),
+      collectionDate: row.collection_date, paymentDate: row.payment_date || "—",
       collectionReceipt: row.collection_receipt_number || "—", chequeDate: row.cheque_date || "—",
-      recordedBy: row.recorded_by, createdAt: row.created_at
+      depositStatus: row.deposit_status, recordedBy: row.recorded_by,
+      confirmedBy: row.confirmed_by, confirmedAt: row.confirmed_at,
+      depositDue: row.deposit_due === true,
+      createdAt: row.created_at
     })) });
   } catch (error) { next(error); }
 }
@@ -536,8 +733,8 @@ async function listReceivables(request, response, next) {
 }
 
 module.exports = {
-  addPayment, createClient, createTransaction, deleteClient, deleteTransaction,
+  addPayment, confirmPaymentDeposit, createClient, createTransaction, deleteClient, deleteTransaction,
   getClient, listClients, listReceivables, paymentHistory,
   permanentlyDeleteClient, permanentlyDeleteTransaction, restoreClient,
-  restoreTransaction, updateClient, updateTransaction
+  reschedulePaymentCheque, restoreTransaction, updateClient, updateTransaction
 };

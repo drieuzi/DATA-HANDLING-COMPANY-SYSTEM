@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
     deleted_at TIMESTAMPTZ,
     deletion_reason TEXT,
     restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_with_transaction BOOLEAN NOT NULL DEFAULT FALSE,
     permanently_deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     permanently_deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -269,7 +270,7 @@ SET current_value = GREATEST(system_counters.current_value, EXCLUDED.current_val
 
 CREATE TABLE IF NOT EXISTS payments (
     id BIGSERIAL PRIMARY KEY,
-    voucher_id BIGINT NOT NULL UNIQUE,
+    voucher_id BIGINT NOT NULL,
     supplier_transaction_id BIGINT NOT NULL,
     supplier_id BIGINT NOT NULL,
     amount NUMERIC(14, 2) NOT NULL,
@@ -333,6 +334,7 @@ CREATE TABLE IF NOT EXISTS client_transactions (
     purchase_order_number VARCHAR(80),
     tin_number VARCHAR(40) NOT NULL,
     collection_receipt_number VARCHAR(80),
+    collection_date DATE,
     payment_date DATE,
     cheque_date DATE,
     amount NUMERIC(14, 2) NOT NULL,
@@ -399,10 +401,15 @@ CREATE TABLE IF NOT EXISTS client_payments (
     client_transaction_id BIGINT NOT NULL,
     client_id BIGINT NOT NULL,
     collection_receipt_number VARCHAR(80),
-    payment_date DATE NOT NULL,
-    cheque_date DATE,
+    collection_date DATE NOT NULL,
+    cheque_date DATE NOT NULL,
+    payment_date DATE,
+    deposit_status VARCHAR(24) NOT NULL DEFAULT 'Pending Deposit'
+        CHECK (deposit_status IN ('Pending Deposit', 'Deposited')),
     amount NUMERIC(14, 2) NOT NULL,
     recorded_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    confirmed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    confirmed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT client_payments_positive_amount CHECK (amount > 0),
     CONSTRAINT client_payments_transaction_client_fk
@@ -528,6 +535,7 @@ ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS deleted_with_transaction BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS permanently_deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS permanently_deleted_at TIMESTAMPTZ;
 
@@ -542,6 +550,7 @@ ALTER TABLE clients
 
 ALTER TABLE client_transactions
     ADD COLUMN IF NOT EXISTS tin_number VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS collection_date DATE,
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS deleted_with_company BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -604,6 +613,113 @@ ALTER TABLE payments
     ADD COLUMN IF NOT EXISTS reversed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS reversed_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS reversal_reason TEXT;
+
+ALTER TABLE client_payments
+    ADD COLUMN IF NOT EXISTS collection_date DATE,
+    ADD COLUMN IF NOT EXISTS deposit_status VARCHAR(24) NOT NULL DEFAULT 'Pending Deposit',
+    ADD COLUMN IF NOT EXISTS confirmed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+
+ALTER TABLE client_payments
+    ALTER COLUMN payment_date DROP NOT NULL;
+
+UPDATE client_payments
+SET collection_date = COALESCE(collection_date, payment_date, created_at::DATE),
+    cheque_date = COALESCE(cheque_date, payment_date, collection_date, created_at::DATE),
+    deposit_status = CASE
+        WHEN payment_date IS NOT NULL THEN 'Deposited'
+        ELSE 'Pending Deposit'
+    END,
+    confirmed_by = CASE
+        WHEN payment_date IS NOT NULL THEN COALESCE(confirmed_by, recorded_by)
+        ELSE confirmed_by
+    END,
+    confirmed_at = CASE
+        WHEN payment_date IS NOT NULL THEN COALESCE(confirmed_at, created_at)
+        ELSE confirmed_at
+    END;
+
+UPDATE client_transactions ct
+SET collection_date = cp.collection_date
+FROM client_payments cp
+WHERE cp.client_transaction_id = ct.id
+  AND ct.collection_date IS NULL;
+
+ALTER TABLE client_payments
+    ALTER COLUMN collection_date SET NOT NULL,
+    ALTER COLUMN cheque_date SET NOT NULL;
+
+ALTER TABLE client_payments
+    DROP CONSTRAINT IF EXISTS client_payments_deposit_status_check;
+
+ALTER TABLE client_payments
+    ADD CONSTRAINT client_payments_deposit_status_check
+    CHECK (deposit_status IN ('Pending Deposit', 'Deposited'));
+
+CREATE INDEX IF NOT EXISTS client_payments_due_cheque_index
+    ON client_payments (cheque_date)
+    WHERE deposit_status = 'Pending Deposit';
+
+CREATE UNIQUE INDEX IF NOT EXISTS client_payments_one_current_transaction_unique
+    ON client_payments (client_transaction_id)
+    WHERE deposit_status IN ('Pending Deposit', 'Deposited');
+
+-- Preserve reversed payment history while allowing a restored Draft voucher
+-- to be issued again. Only one active payment may exist for a voucher.
+ALTER TABLE payments
+    DROP CONSTRAINT IF EXISTS payments_voucher_id_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_voucher_unique
+    ON payments (voucher_id)
+    WHERE reversed_at IS NULL;
+
+-- Repair vouchers that were left active by older builds after their supplier
+-- transaction had already been soft-deleted.
+WITH orphaned_payments AS (
+    SELECT p.supplier_transaction_id, SUM(p.amount) AS amount_to_restore
+    FROM payments p
+    JOIN vouchers v ON v.id = p.voucher_id
+    JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+    WHERE st.deleted_at IS NOT NULL
+      AND v.deleted_at IS NULL
+      AND p.reversed_at IS NULL
+    GROUP BY p.supplier_transaction_id
+)
+UPDATE supplier_transactions st
+SET balance = LEAST(st.amount, st.balance + orphaned_payments.amount_to_restore),
+    voucher_date = NULL,
+    payment_date = NULL,
+    cheque_date = NULL
+FROM orphaned_payments
+WHERE st.id = orphaned_payments.supplier_transaction_id;
+
+UPDATE payments p
+SET reversed_at = NOW(),
+    reversal_reason = COALESCE(
+        p.reversal_reason,
+        'Automatically reversed because the linked transaction was deleted'
+    )
+FROM vouchers v
+JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+WHERE p.voucher_id = v.id
+  AND st.deleted_at IS NOT NULL
+  AND v.deleted_at IS NULL
+  AND p.reversed_at IS NULL;
+
+UPDATE vouchers v
+SET payment_status = 'Deleted',
+    deleted_at = COALESCE(v.deleted_at, NOW()),
+    deletion_reason = COALESCE(
+        v.deletion_reason,
+        'Automatically deleted because the linked transaction was deleted'
+    ),
+    restore_allowed = TRUE,
+    deleted_with_transaction = TRUE,
+    updated_at = NOW()
+FROM supplier_transactions st
+WHERE v.supplier_transaction_id = st.id
+  AND st.deleted_at IS NOT NULL
+  AND v.deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS suppliers_deleted_at_index
     ON suppliers (deleted_at);
@@ -751,7 +867,7 @@ COMMENT ON TABLE clients IS
 COMMENT ON TABLE client_transactions IS
     'Sales transactions shown in Receivables whether paid or unpaid.';
 COMMENT ON TABLE client_payments IS
-    'Client payment history that reduces client transaction balances.';
+    'Client cheque history. Collection does not reduce the balance; manual deposit confirmation does.';
 COMMENT ON TABLE outside_services IS
     'Outside service expenses counted in monthly analytics using service_date.';
 COMMENT ON TABLE audit_logs IS

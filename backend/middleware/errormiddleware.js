@@ -16,6 +16,12 @@ function errorHandler(error, _request, response, _next) {
     if (error.constraint === "vouchers_number_lower_unique") {
       return response.status(409).json({ message: "That voucher number already exists." });
     }
+    if (error.constraint === "payments_one_active_voucher_unique") {
+      return response.status(409).json({ message: "This voucher already has an active payment." });
+    }
+    if (error.constraint === "client_payments_one_current_transaction_unique") {
+      return response.status(409).json({ message: "This client transaction already has a pending or deposited cheque." });
+    }
     if (error.constraint === "users_username_lower_unique") {
       return response.status(409).json({ message: "That username is already in use." });
     }
@@ -40,6 +46,12 @@ function errorHandler(error, _request, response, _next) {
 
   if (error.code === "23514" || error.code === "22P02") {
     return response.status(400).json({ message: "The submitted values do not satisfy the database rules." });
+  }
+
+  if (error.code === "42703" || error.code === "42P01") {
+    return response.status(503).json({
+      message: "The database is missing a required update. Stop the server, run npm run db:init and npm run db:verify, then start it again."
+    });
   }
 
   response.status(500).json({ message: "The server could not complete the request." });

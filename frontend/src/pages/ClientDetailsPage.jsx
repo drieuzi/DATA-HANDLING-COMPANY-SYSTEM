@@ -1,17 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import TransactionEditorDialog from "../components/TransactionEditorDialog.jsx";
 import ClientPaymentDialog from "../components/ClientPaymentDialog.jsx";
 import ClientEditorDialog from "../components/ClientEditorDialog.jsx";
+import ClientDepositDialog from "../components/ClientDepositDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 
-export default function ClientDetailsPage({ client, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onSaveClient, onDeleteClient, onRestoreClient }) {
+export default function ClientDetailsPage({ client, user, focusTransactionId, onFocusHandled, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onConfirmDeposit, onRescheduleCheque, onSaveClient, onDeleteClient, onRestoreClient }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [paymentTransaction, setPaymentTransaction] = useState(null);
   const [companyEditorOpen, setCompanyEditorOpen] = useState(false);
+  const [depositTransaction, setDepositTransaction] = useState(null);
+  const [highlightedTransactionId, setHighlightedTransactionId] = useState(null);
   const [transactionSearch, setTransactionSearch] = useState("");
   const [transactionStatus, setTransactionStatus] = useState("All");
   const isAdmin = user?.role === "admin";
@@ -20,6 +23,24 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
     (total, transaction) => total + Number(transaction.balance || 0),
     0
   );
+  const dueCheques = activeTransactions.filter((transaction) => transaction.depositDue);
+
+  useEffect(() => {
+    if (!focusTransactionId) return undefined;
+    setHighlightedTransactionId(String(focusTransactionId));
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`client-transaction-${focusTransactionId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    });
+    const timer = window.setTimeout(() => setHighlightedTransactionId(null), 4500);
+    onFocusHandled?.();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusTransactionId, onFocusHandled]);
   const filteredTransactions = useMemo(() => client.transactions.filter((transaction) => {
     if (transaction.deletedAt) return false;
     const effectiveStatus = transaction.billingStatus;
@@ -37,6 +58,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
     ].filter(Boolean).join(" ").toLowerCase();
     return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
   }), [client.transactions, transactionSearch, transactionStatus]);
+
   return (
     <div className="app-page client-details-page">
       <TrackRecordHeader
@@ -76,6 +98,11 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
           </div>
         </section>
 
+        {dueCheques.length > 0 && <section className="deposit-notification" role="alert">
+          <strong>{dueCheques.length} cheque deposit{dueCheques.length === 1 ? " is" : "s are"} due today or overdue.</strong>
+          <span>Confirm each successful deposit or adjust its cheque date.</span>
+        </section>}
+
         <section className="client-records" aria-label={`${client.name} transaction records`}>
           <div className="client-records-heading">
             <div>
@@ -114,20 +141,29 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                   <th>C.R. #</th>
                   <th>TIN #</th>
                   <th>Date</th>
+                  <th>Collection Date</th>
+                  <th>Cheque Date</th>
                   <th>Amount</th>
                   <th>Balance</th>
                   <th>Billing Status</th>
+                  <th>Deposit Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTransactions.length ? filteredTransactions.map((transaction) => (
-                  <tr className={transaction.deletedAt ? "is-deleted" : ""} key={transaction.id}>
+                  <tr
+                    id={`client-transaction-${transaction.id}`}
+                    className={`${transaction.deletedAt ? "is-deleted" : ""}${String(transaction.id) === highlightedTransactionId ? " is-notification-target" : ""}`}
+                    key={transaction.id}
+                  >
                     <td>{transaction.purchaseOrder}</td>
                     <td>{transaction.salesInvoice}</td>
                     <td>{transaction.collectionReceipt}</td>
                     <td>{transaction.tinNumber || "—"}</td>
                     <td>{formatRecordDate(transaction.date)}</td>
+                    <td>{formatRecordDate(transaction.collectionDate)}</td>
+                    <td>{formatRecordDate(transaction.chequeDate)}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
                     <td>{formatCurrency(transaction.balance)}</td>
                     <td>
@@ -139,14 +175,16 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
                         {transaction.deletedAt ? "Deleted" : transaction.billingStatus}
                       </span>
                     </td>
+                    <td><span className={`deposit-status${transaction.depositDue ? " deposit-status--due" : ""}`}>{transaction.depositDue ? "Due for Confirmation" : transaction.depositStatus}</span></td>
                     <td><div className="row-actions">
                       {!transaction.deletedAt && <button className="table-action" type="button" onClick={() => { setEditingTransaction(transaction); setEditorOpen(true); }}>Edit</button>}
-                      {!transaction.deletedAt && Number(transaction.balance) > 0 && <button type="button" onClick={() => setPaymentTransaction(transaction)}>Receive Payment</button>}
+                      {!transaction.deletedAt && Number(transaction.balance) > 0 && transaction.depositStatus !== "Pending Deposit" && <button type="button" onClick={() => setPaymentTransaction(transaction)}>Receive Cheque</button>}
+                      {!transaction.deletedAt && transaction.depositStatus === "Pending Deposit" && <button type="button" title={transaction.depositDue ? "Confirm deposit or adjust its date" : "Adjust the scheduled cheque date"} onClick={() => setDepositTransaction(transaction)}>{transaction.depositDue ? "Review Deposit" : "Adjust Date"}</button>}
                       {!transaction.deletedAt && <button className="danger-action" type="button" onClick={async () => { const reason = window.prompt("Reason for deleting this client transaction:"); if (!reason?.trim()) return; if (!window.confirm("Delete this client transaction? It will be removed from the User transaction list and can be restored by an Admin.")) return; try { await onDeleteTransaction(transaction.id, reason.trim()); } catch (error) { window.alert(error.message); } }}>Delete</button>}
                       {isAdmin && !client.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                )) : <tr><td className="detail-records-empty" colSpan="9">No client transactions match these filters.</td></tr>}
+                )) : <tr><td className="detail-records-empty" colSpan="12">No client transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -155,6 +193,7 @@ export default function ClientDetailsPage({ client, user, onBack, onSaveTransact
       <ClientEditorDialog isOpen={companyEditorOpen} client={client} onSave={(values) => onSaveClient(client.id, values)} onClose={() => setCompanyEditorOpen(false)} />
       <TransactionEditorDialog isOpen={editorOpen} type="client" companyName={client.name} transaction={editingTransaction} onSave={async (values) => { await onSaveTransaction(client.id, values); setEditorOpen(false); }} onClose={() => setEditorOpen(false)} />
       <ClientPaymentDialog isOpen={Boolean(paymentTransaction)} transaction={paymentTransaction} clientName={client.name} onSave={(values) => onReceivePayment(paymentTransaction.id, values)} onClose={() => setPaymentTransaction(null)} />
+      <ClientDepositDialog transaction={depositTransaction} clientName={client.name} onConfirm={onConfirmDeposit} onReschedule={onRescheduleCheque} onClose={() => setDepositTransaction(null)} />
     </div>
   );
 }

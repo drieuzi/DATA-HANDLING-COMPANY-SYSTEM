@@ -22,6 +22,8 @@ export default function DashboardPage({
   onOpenAdmin,
   onOpenMonitoring,
   onOpenReports,
+  onOpenDueCheque,
+  dueChequePayments = [],
   voucherCount
 }) {
   const [dashboardData, setDashboardData] = useState(() =>
@@ -66,7 +68,7 @@ export default function DashboardPage({
     <div className="app-page dashboard-page">
       <Header user={user} onLogout={onLogout} />
 
-      <main className="dashboard" aria-label="Dashboard">
+      <main className={`dashboard${dueChequePayments.length ? " has-deposit-notifications" : ""}`} aria-label="Dashboard">
         <div className="dashboard-heading">
           <span className={`data-badge data-badge--${dataSource}`}>
             {dataSource === "live"
@@ -78,6 +80,22 @@ export default function DashboardPage({
                   : "Unavailable"}
           </span>
         </div>
+
+        {dueChequePayments.length > 0 && <section className="dashboard-deposit-alert" role="alert">
+          <div>
+            <strong>{dueChequePayments.length} client cheque deposit{dueChequePayments.length === 1 ? " needs" : "s need"} confirmation</strong>
+            <span>Select a client cheque to open and highlight its exact transaction.</span>
+          </div>
+          <div className="dashboard-deposit-links">
+            {dueChequePayments.slice(0, 4).map((item) => (
+              <button key={`${item.clientId}-${item.id}`} type="button" onClick={() => onOpenDueCheque(item)}>
+                <strong>{item.clientName}</strong>
+                <span>{item.collectionReceipt && item.collectionReceipt !== "—" ? `C.R. ${item.collectionReceipt}` : "Open transaction"}</span>
+              </button>
+            ))}
+            {dueChequePayments.length > 4 && <button type="button" onClick={onOpenClients}>View {dueChequePayments.length - 4} more</button>}
+          </div>
+        </section>}
 
         <section className="dashboard-menu" aria-label="Company records">
           <DashboardCard label="Clients Track Records" onClick={onOpenClients} />

@@ -15,30 +15,66 @@
   padding: 28px 0 54px;
 }
 
+.dashboard.has-deposit-notifications {
+  grid-template-areas:
+    "heading heading"
+    "notice notice"
+    "menu analytics"
+    "totals actions";
+}
+
+.dashboard-deposit-alert {
+  grid-area: notice;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 2px solid var(--black);
+  border-radius: 20px;
+  background: var(--peach-strong);
+}
+
+.dashboard-deposit-alert > div { display: grid; gap: 4px; }
+.dashboard-deposit-alert strong { font-size: .95rem; }
+.dashboard-deposit-alert span { font-size: .78rem; font-weight: 700; }
+
+.dashboard-deposit-alert > .dashboard-deposit-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.dashboard-deposit-links button {
+  display: grid;
+  gap: 2px;
+  min-width: 138px;
+  padding: 9px 13px;
+  border: 2px solid var(--black);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--black);
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.dashboard-deposit-links button:hover {
+  background: var(--orange-accent);
+  box-shadow: 0 4px 0 var(--black);
+  transform: translateY(-2px);
+}
+
+.dashboard-deposit-links button strong { font-size: .72rem; }
+.dashboard-deposit-links button span { font-size: .64rem; }
+
 .dashboard-heading {
   grid-area: heading;
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 20px;
-}
-
-.dashboard-heading h1,
-.dashboard-eyebrow {
-  margin: 0;
-}
-
-.dashboard-heading h1 {
-  font-size: clamp(2rem, 5vw, 3.2rem);
-  line-height: 1;
-}
-
-.dashboard-eyebrow {
-  margin-bottom: 7px;
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
 }
 
 .data-badge {
@@ -336,9 +372,25 @@
       "totals"
       "actions";
   }
+
+  .dashboard.has-deposit-notifications {
+    grid-template-areas:
+      "heading"
+      "notice"
+      "menu"
+      "analytics"
+      "totals"
+      "actions";
+  }
 }
 
 @media (max-width: 560px) {
+  .dashboard-deposit-alert {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .dashboard-deposit-links { justify-content: stretch; }
+  .dashboard-deposit-links button { flex: 1 1 100%; }
   .dashboard {
     width: min(100% - 24px, 520px);
     gap: 18px;

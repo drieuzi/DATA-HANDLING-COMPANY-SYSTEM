@@ -58,6 +58,17 @@ export async function recordClientPayment(transactionId, values) {
   })).transaction;
 }
 
+export async function confirmClientPaymentDeposit(paymentId) {
+  return apiRequest(`/clients/payments/${paymentId}/confirm`, { method: "PATCH" });
+}
+
+export async function rescheduleClientPaymentCheque(paymentId, chequeDate) {
+  return apiRequest(`/clients/payments/${paymentId}/cheque-date`, {
+    method: "PATCH",
+    body: JSON.stringify({ chequeDate })
+  });
+}
+
 export async function getClientPaymentHistory(transactionId) {
   return (await apiRequest(`/clients/transactions/${transactionId}/payments`)).payments;
 }

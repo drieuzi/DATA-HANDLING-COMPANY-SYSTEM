@@ -11,6 +11,8 @@ export default function ClientsPage({
   onSaveTransaction,
   onDeleteTransaction,
   onReceivePayment,
+  onConfirmDeposit,
+  onRescheduleCheque,
   user,
   onSaveClient,
   onDeleteClient,
@@ -74,6 +76,8 @@ export default function ClientsPage({
               onSaveTransaction={onSaveTransaction}
               onDeleteTransaction={onDeleteTransaction}
               onReceivePayment={onReceivePayment}
+              onConfirmDeposit={onConfirmDeposit}
+              onRescheduleCheque={onRescheduleCheque}
               isAdmin={isAdmin}
               embedded
             />

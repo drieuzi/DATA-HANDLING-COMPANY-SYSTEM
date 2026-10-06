@@ -145,6 +145,37 @@
   box-shadow: 0 12px 35px var(--shadow-color);
 }
 
+.deposit-notification {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 14px 17px;
+  border: 2px solid var(--black);
+  border-radius: 18px;
+  background: var(--peach-strong);
+}
+
+.deposit-notification strong { font-size: .86rem; }
+.deposit-notification span { font-size: .76rem; font-weight: 700; }
+
+.deposit-status {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--yellow-light);
+  color: var(--black);
+  font-size: .7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.deposit-status--due {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
 .payment-balance {
   display: flex;
   align-items: center;
@@ -157,6 +188,64 @@
 
 .payment-balance span { font-size: .72rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .payment-balance strong { font-size: 1.25rem; }
+
+.deposit-confirmation-dialog { width: min(680px, calc(100% - 28px)); }
+
+.deposit-confirmation-content {
+  display: grid;
+  gap: 18px;
+  padding: 24px 26px 26px;
+}
+
+.deposit-confirmation-intro {
+  margin: 0;
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.deposit-confirmation-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid var(--black);
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.deposit-confirmation-details div { padding: 13px 15px; border-bottom: 1px solid var(--border); }
+.deposit-confirmation-details div:nth-child(odd) { border-right: 1px solid var(--border); }
+.deposit-confirmation-details div:nth-last-child(-n + 2) { border-bottom: 0; }
+.deposit-confirmation-details dt { color: var(--muted); font-size: .64rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.deposit-confirmation-details dd { margin: 5px 0 0; font-weight: 900; overflow-wrap: anywhere; }
+
+.deposit-reschedule-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 170px auto;
+  align-items: end;
+  gap: 12px;
+  padding: 15px;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.deposit-reschedule-panel > div { display: grid; gap: 4px; }
+.deposit-reschedule-panel strong { font-size: .78rem; }
+.deposit-reschedule-panel span { color: var(--muted); font-size: .7rem; font-weight: 700; }
+.deposit-reschedule-panel input { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); font: inherit; }
+
+.deposit-confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+.client-record-table tr.is-notification-target td {
+  background: var(--orange-accent);
+  animation: transaction-target-pulse 850ms ease-in-out 2;
+}
+
+@keyframes transaction-target-pulse {
+  50% { background: var(--white); }
+}
 
 .client-records-heading {
   display: flex;
@@ -191,7 +280,7 @@
 
 .client-record-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1280px;
   border-collapse: collapse;
   background: var(--white);
   font-size: 0.82rem;
@@ -227,6 +316,10 @@
 }
 
 @media (max-width: 560px) {
+  .deposit-notification {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .client-list-main {
     width: min(100% - 24px, 520px);
     padding: 30px 0 40px;
@@ -267,4 +360,13 @@
     flex-direction: column;
     gap: 7px;
   }
+
+  .deposit-confirmation-details,
+  .deposit-reschedule-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .deposit-confirmation-details div:nth-child(odd) { border-right: 0; }
+  .deposit-confirmation-details div:nth-last-child(2) { border-bottom: 1px solid var(--border); }
+  .deposit-confirmation-actions { align-items: stretch; flex-direction: column-reverse; }
 }

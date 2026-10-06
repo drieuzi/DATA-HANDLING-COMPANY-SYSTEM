@@ -1,9 +1,9 @@
 const express = require("express");
 const {
-  addPayment, createClient, createTransaction, deleteClient, deleteTransaction,
+  addPayment, confirmPaymentDeposit, createClient, createTransaction, deleteClient, deleteTransaction,
   getClient, listClients, listReceivables, paymentHistory,
   permanentlyDeleteClient, permanentlyDeleteTransaction, restoreClient,
-  restoreTransaction, updateClient, updateTransaction
+  reschedulePaymentCheque, restoreTransaction, updateClient, updateTransaction
 } = require("../controllers/clientcontroller");
 const { requireAdmin, requireAuth, requireStaff } = require("../middleware/authmiddleware");
 
@@ -27,5 +27,7 @@ router.delete("/transactions/:id", deleteTransaction);
 router.patch("/transactions/:id/restore", requireAdmin, restoreTransaction);
 router.delete("/transactions/:id/permanent", requireAdmin, permanentlyDeleteTransaction);
 router.post("/transactions/:id/payments", addPayment);
+router.patch("/payments/:paymentId/confirm", requireStaff, confirmPaymentDeposit);
+router.patch("/payments/:paymentId/cheque-date", requireStaff, reschedulePaymentCheque);
 
 module.exports = router;

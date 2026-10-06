@@ -106,7 +106,7 @@ export default function TotalSalesPage({ clients, onBack }) {
                   <th>C.R. #</th>
                   <th>P.O. #</th>
                   <th>Transaction Date</th>
-                  <th>Exact Payment Date</th>
+                  <th>Deposit Date</th>
                   <th>Amount</th>
                 </tr>
               </thead>
