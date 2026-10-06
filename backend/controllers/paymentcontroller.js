@@ -118,10 +118,28 @@ function voucherValues(body, { allowCancelled = false } = {}) {
     paymentDate: validate.date(body.paymentDate, "Payment date", { required: paymentStatus === "Issued" }),
     paymentAmount: validate.money(body.amountApplied || body.paymentAmount, "Payment amount"),
     withholdingTaxRate: body.applyWithholdingTax === true ? "0.0100" : "0",
-    bankName: validate.text(body.bankName, "Bank used", { required: true, max: 120 }),
+    bankName: validate.text(body.bankName, "Bank used", { required: true, max: 120 }).toUpperCase(),
     paymentStatus,
     particulars: validate.text(body.particulars, "Particulars", { max: 2000 }),
     attachmentName: validate.text(body.attachmentName, "Attachment name", { max: 255 })
+  };
+}
+
+function voucherEditValues(body) {
+  const paymentStatus = validate.text(
+    body.status || body.paymentStatus,
+    "Voucher status",
+    { required: true, max: 20 }
+  );
+  const allowedStatuses = ["Draft", "Issued", "Cancelled"];
+  if (!allowedStatuses.includes(paymentStatus)) {
+    throw new HttpError(400, `Voucher status must be ${allowedStatuses.join(", ")}.`);
+  }
+  return {
+    voucherDate: validate.date(body.voucherDate, "Voucher date", { required: true }),
+    paymentDate: validate.date(body.paymentDate, "Payment date", { required: true }),
+    chequeDate: validate.date(body.chequeDate, "Cheque date", { required: true }),
+    paymentStatus
   };
 }
 
@@ -151,7 +169,7 @@ async function issueVoucher(request, response, next) {
 async function updateVoucher(request, response, next) {
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
-    await updateVoucherDetails(request, voucherId, voucherValues(request.body, { allowCancelled: true }));
+    await updateVoucherDetails(request, voucherId, voucherEditValues(request.body));
     const result = await pool.query(
       `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
          st.sales_invoice_number
@@ -195,6 +213,7 @@ async function restoreVoucher(request, response, next) {
       `UPDATE vouchers v SET payment_status = 'Draft',
          deleted_at = NULL, deleted_by = NULL,
          deletion_reason = NULL, restore_allowed = TRUE,
+         deleted_with_transaction = FALSE,
          issued_by = NULL, issued_at = NULL, cancelled_at = NULL,
          permanently_deleted_by = NULL, permanently_deleted_at = NULL
        FROM supplier_transactions st, suppliers s
@@ -205,7 +224,22 @@ async function restoreVoucher(request, response, next) {
        RETURNING v.id, v.voucher_number`,
       [voucherId]
     );
-    if (!result.rows[0]) throw new HttpError(404, "Deleted voucher or its active transaction was not found.");
+    if (!result.rows[0]) {
+      const blocked = await client.query(
+        `SELECT v.id, st.deleted_at AS transaction_deleted_at,
+           s.deleted_at AS supplier_deleted_at
+         FROM vouchers v
+         JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+         JOIN suppliers s ON s.id = v.supplier_id
+         WHERE v.id = $1 AND v.payment_status = 'Deleted'
+           AND v.deleted_at IS NOT NULL AND v.restore_allowed = TRUE`,
+        [voucherId]
+      );
+      if (blocked.rows[0]?.supplier_deleted_at || blocked.rows[0]?.transaction_deleted_at) {
+        throw new HttpError(409, "Restore the linked supplier and transaction first. Its voucher will be restored automatically as Draft.");
+      }
+      throw new HttpError(404, "Restorable deleted voucher not found.");
+    }
     await writeAudit(client, request, "VOUCHER_RESTORED", "voucher", voucherId, {
       voucherNumber: result.rows[0].voucher_number,
       restoredAs: "Draft",

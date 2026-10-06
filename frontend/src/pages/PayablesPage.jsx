@@ -40,6 +40,9 @@ export default function PayablesPage({ suppliers, user, onBack, embedded = false
       rows={rows}
       onBack={onBack}
       embedded={embedded}
+      searchPlaceholder="Search company, P.O., S.I., or voucher…"
+      searchKeys={["companyName", "purchaseOrder", "salesInvoice", "voucherNumber"]}
+      dateField="voucherDate"
       officeReportTitle="Payables Office Report"
       generatedBy={user?.fullName || user?.username}
     />

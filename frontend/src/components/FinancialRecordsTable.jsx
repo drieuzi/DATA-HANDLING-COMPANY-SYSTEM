@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import TrackRecordHeader from "./TrackRecordHeader.jsx";
 import OfficeReportDialog from "./OfficeReportDialog.jsx";
 
@@ -6,18 +6,35 @@ export default function FinancialRecordsTable({
   title, columns, rows, onBack, onEdit, onDelete,
   canEdit = () => true, canDelete = () => false, renderActions, embedded = false,
   searchPlaceholder = "Search company, P.O., S.I., voucher…",
+  searchKeys = [],
+  dateField = "",
   officeReportTitle,
   generatedBy
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
+  const suggestionListId = `record-suggestions-${useId().replaceAll(":", "")}`;
   const sectionTitle = title.replace(/ Track Records$/i, "");
+  const suggestions = useMemo(() => [...new Set(rows.flatMap((row) =>
+    searchKeys.map((key) => String(row[key] || "").trim()).filter(Boolean)
+  ))].sort((first, second) => first.localeCompare(second)).slice(0, 100), [rows, searchKeys]);
   const filteredRows = useMemo(() => rows.filter((row) => {
     const matchesStatus = status === "All" || row.billingStatus === status;
-    const text = Object.values(row).filter((value) => ["string", "number"].includes(typeof value)).join(" ").toLowerCase();
-    return matchesStatus && text.includes(query.toLowerCase());
-  }), [rows, query, status]);
+    const searchableValues = searchKeys.length
+      ? searchKeys.map((key) => row[key])
+      : Object.values(row);
+    const text = searchableValues
+      .filter((value) => ["string", "number"].includes(typeof value))
+      .join(" ")
+      .toLowerCase();
+    const rowDate = dateField ? String(row[dateField] || "").slice(0, 10) : "";
+    const matchesFrom = !fromDate || (rowDate && rowDate >= fromDate);
+    const matchesTo = !toDate || (rowDate && rowDate <= toDate);
+    return matchesStatus && matchesFrom && matchesTo && text.includes(query.trim().toLowerCase());
+  }), [rows, query, status, searchKeys, dateField, fromDate, toDate]);
 
   const recordsCard = (
     <section className="financial-records-card" aria-label={title}>
@@ -28,9 +45,18 @@ export default function FinancialRecordsTable({
               {officeReportTitle && <button className="secondary-action" type="button" disabled={!filteredRows.length} onClick={() => setReportOpen(true)}>Preview Office Report</button>}
             </div>
           </div>
-          <div className="records-toolbar">
-            <input type="search" placeholder={searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Not Paid</option></select>
+          <div className={`records-toolbar${dateField ? " records-toolbar--date-range" : ""}`}>
+            <label className="records-filter-field records-search-field">
+              <span>Search records</span>
+              <input type="search" list={suggestionListId} placeholder={searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
+              <datalist id={suggestionListId}>{suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist>
+            </label>
+            {dateField && <label className="records-filter-field"><span>From</span><input type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} /></label>}
+            {dateField && <label className="records-filter-field"><span>To</span><input type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} /></label>}
+            <label className="records-filter-field">
+              <span>Billing status</span>
+              <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Paid</option><option>Not Paid</option></select>
+            </label>
           </div>
           <div className="financial-table-wrapper">
             <table className="financial-record-table"><thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}{(onEdit || onDelete || renderActions) && <th>Actions</th>}</tr></thead>

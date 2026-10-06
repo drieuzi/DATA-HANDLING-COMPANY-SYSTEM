@@ -218,45 +218,17 @@ async function updateVoucherDetails(request, voucherId, values) {
   try {
     await client.query("BEGIN");
     const voucher = await lockVoucher(client, voucherId);
-    if (Number(voucher.supplier_id) !== Number(values.supplierId)
-      || Number(voucher.supplier_transaction_id) !== Number(values.supplierTransactionId)) {
-      throw new HttpError(409, "The linked supplier and transaction cannot be changed after the voucher is created.");
+    if (voucher.payment_status === "Deleted") {
+      throw new HttpError(409, "Deleted vouchers cannot be edited.");
     }
 
-    const transaction = await lockTransaction(client, voucher.supplier_transaction_id);
-    let availableAmount = Number(transaction.balance);
-    if (voucher.payment_status === "Issued" && values.paymentStatus === "Issued") {
-      const paymentResult = await client.query(
-        `SELECT * FROM payments WHERE voucher_id = $1 AND reversed_at IS NULL FOR UPDATE`,
-        [voucher.id]
-      );
-      const payment = paymentResult.rows[0];
-      if (!payment) throw new HttpError(409, "The issued voucher payment history could not be found.");
-      availableAmount = Number(transaction.balance) + Number(payment.amount);
-      if (Number(values.paymentAmount) !== availableAmount) {
-        throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full transaction amount of ${availableAmount.toFixed(2)}.`);
-      }
-      await client.query(
-        `UPDATE payments SET amount = $1, payment_date = $2 WHERE id = $3`,
-        [values.paymentAmount, values.paymentDate, payment.id]
-      );
-      await client.query(
-        `UPDATE supplier_transactions SET balance = $1, voucher_date = $2,
-           payment_date = $3, cheque_date = $4 WHERE id = $5`,
-        [availableAmount - Number(values.paymentAmount), values.voucherDate,
-          values.paymentDate, values.chequeDate, transaction.id]
-      );
-    } else if (voucher.payment_status === "Issued") {
-      availableAmount = await reverseIssuedVoucher(
+    if (voucher.payment_status === "Issued" && values.paymentStatus !== "Issued") {
+      await reverseIssuedVoucher(
         client,
         request,
         voucher,
         `Voucher status changed from Issued to ${values.paymentStatus}`
       );
-    }
-
-    if (values.paymentStatus !== "Cancelled" && Number(values.paymentAmount) !== availableAmount) {
-      throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full transaction amount of ${availableAmount.toFixed(2)}.`);
     }
 
     const storedStatus = values.paymentStatus === "Issued" && voucher.payment_status !== "Issued"
@@ -265,28 +237,54 @@ async function updateVoucherDetails(request, voucherId, values) {
 
     const updated = await client.query(
       `UPDATE vouchers SET voucher_date = $1,
-         cheque_date = $2, cheque_number = $3, payment_date = $4,
-         payment_amount = $5, withholding_tax_rate = $6, bank_name = $7,
-         particulars = $8,
-         payment_status = $9,
-         issued_by = CASE WHEN $9 = 'Draft' THEN NULL ELSE issued_by END,
-         issued_at = CASE WHEN $9 = 'Draft' THEN NULL ELSE issued_at END,
-         cancelled_at = CASE WHEN $9 = 'Cancelled' THEN NOW() ELSE NULL END,
+         payment_date = $2,
+         cheque_date = $3,
+         payment_status = $4::VARCHAR,
+         issued_by = CASE WHEN $4::VARCHAR = 'Draft' THEN NULL ELSE issued_by END,
+         issued_at = CASE WHEN $4::VARCHAR = 'Draft' THEN NULL ELSE issued_at END,
+         cancelled_at = CASE WHEN $4::VARCHAR = 'Cancelled' THEN NOW() ELSE NULL END,
          updated_at = NOW()
-       WHERE id = $10 RETURNING *`,
-      [values.voucherDate, values.chequeDate, values.chequeNumber,
-        values.paymentDate, values.paymentAmount, values.withholdingTaxRate,
-        values.bankName, values.particulars, storedStatus, voucher.id]
+       WHERE id = $5 AND deleted_at IS NULL RETURNING *`,
+      [values.voucherDate, values.paymentDate, values.chequeDate, storedStatus, voucher.id]
     );
+
+    if (!updated.rows[0]) throw new HttpError(404, "Voucher not found.");
+
+    if (voucher.payment_status === "Issued" && values.paymentStatus !== "Issued") {
+      await client.query(
+        `UPDATE payments SET payment_date = $1 WHERE voucher_id = $2`,
+        [values.paymentDate, voucher.id]
+      );
+    }
 
     if (values.paymentStatus === "Issued" && voucher.payment_status !== "Issued") {
       await issueLockedVoucher(client, request, updated.rows[0]);
+    } else if (values.paymentStatus === "Issued") {
+      const paymentResult = await client.query(
+        `UPDATE payments SET payment_date = $1
+         WHERE voucher_id = $2 AND reversed_at IS NULL
+         RETURNING id`,
+        [values.paymentDate, voucher.id]
+      );
+      if (!paymentResult.rows[0]) {
+        throw new HttpError(409, "The issued voucher payment history could not be found.");
+      }
+      await client.query(
+        `UPDATE supplier_transactions
+         SET voucher_date = $1, payment_date = $2, cheque_date = $3
+         WHERE id = $4`,
+        [values.voucherDate, values.paymentDate, values.chequeDate,
+          voucher.supplier_transaction_id]
+      );
     }
     await writeAudit(client, request, "VOUCHER_UPDATED", "voucher", voucher.id, {
       voucherNumber: voucher.voucher_number,
-      paymentAmount: values.paymentAmount,
-      withholdingTaxRate: values.withholdingTaxRate,
-      bankName: values.bankName,
+      previousVoucherDate: voucher.voucher_date,
+      voucherDate: values.voucherDate,
+      previousPaymentDate: voucher.payment_date,
+      paymentDate: values.paymentDate,
+      previousChequeDate: voucher.cheque_date,
+      chequeDate: values.chequeDate,
       previousStatus: voucher.payment_status,
       status: values.paymentStatus
     });
@@ -351,6 +349,7 @@ async function deleteVoucherForHistory(request, voucherId, reason) {
     const result = await client.query(
       `UPDATE vouchers SET payment_status = 'Deleted', deleted_at = NOW(),
          deleted_by = $1, deletion_reason = $2, restore_allowed = TRUE,
+         deleted_with_transaction = FALSE,
          permanently_deleted_by = NULL, permanently_deleted_at = NULL,
          updated_at = NOW()
        WHERE id = $3 AND deleted_at IS NULL
@@ -435,5 +434,6 @@ module.exports = {
   deleteVoucherForHistory,
   issueVoucherPayment,
   permanentlyDeleteVoucher,
+  reverseIssuedVoucher,
   updateVoucherDetails
 };

@@ -21,14 +21,24 @@ export default function VouchersPage({
   const [loadingVoucherNumber, setLoadingVoucherNumber] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
+  const [voucherDate, setVoucherDate] = useState("");
   const isAdmin = user?.role === "admin";
+  const searchSuggestions = useMemo(() => [...new Set(vouchers.flatMap((voucher) => [
+    voucher.voucherNumber,
+    voucher.supplierName,
+    voucher.purchaseOrder,
+    voucher.salesInvoice
+  ]).map((value) => String(value || "").trim()).filter(Boolean))]
+    .sort((first, second) => first.localeCompare(second))
+    .slice(0, 100), [vouchers]);
   const filtered = useMemo(() => vouchers.filter((voucher) => {
     if (voucher.deletedAt) return false;
     const effectiveStatus = voucherStatus(voucher);
     const matchesStatus = status === "All" || effectiveStatus === status;
+    const matchesDate = !voucherDate || String(voucher.voucherDate || "").slice(0, 10) === voucherDate;
     const haystack = `${voucher.voucherNumber} ${voucher.supplierName} ${voucher.purchaseOrder} ${voucher.salesInvoice}`.toLowerCase();
-    return matchesStatus && haystack.includes(query.toLowerCase());
-  }), [vouchers, query, status]);
+    return matchesStatus && matchesDate && haystack.includes(query.trim().toLowerCase());
+  }), [vouchers, query, status, voucherDate]);
   const issued = vouchers.filter((item) => voucherStatus(item) === "Issued");
   const cancelled = vouchers.filter((item) => voucherStatus(item) === "Cancelled");
   const totalCount = vouchers.filter((item) => !item.deletedAt).length;
@@ -85,9 +95,14 @@ export default function VouchersPage({
               {loadingVoucherNumber ? "Loading voucher number…" : "+ Create Voucher"}
             </button>
           </div>
-          <div className="records-toolbar">
-            <input type="search" placeholder="Search voucher, supplier, P.O., or S.I.…" value={query} onChange={(event) => setQuery(event.target.value)} />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Cancelled</option></select>
+          <div className="records-toolbar records-toolbar--voucher-date">
+            <label className="records-filter-field records-search-field">
+              <span>Search records</span>
+              <input type="search" list="voucher-search-suggestions" placeholder="Search voucher, supplier, P.O., or S.I.…" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <datalist id="voucher-search-suggestions">{searchSuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist>
+            </label>
+            <label className="records-filter-field"><span>Voucher date</span><input type="date" value={voucherDate} onChange={(event) => setVoucherDate(event.target.value)} /></label>
+            <label className="records-filter-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Cancelled</option></select></label>
           </div>
           <div className="financial-table-wrapper"><table className="financial-record-table voucher-table"><thead><tr><th>Voucher #</th><th>Supplier</th><th>P.O. #</th><th>S.I. #</th><th>Voucher Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{filtered.length ? filtered.map((voucher) => {
@@ -108,8 +123,8 @@ export default function VouchersPage({
           </table></div>
         </section>
       </main>
-      <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={nextVoucherNumber} suppliers={suppliers} allowCancellation={!isAdmin} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />
-      <VoucherEditorDialog isOpen={Boolean(editingVoucher)} voucher={editingVoucher} suppliers={suppliers} allowCancellation={!isAdmin} onSave={async (values) => { await onEdit(editingVoucher.id, values); setEditingVoucher(null); }} onClose={() => setEditingVoucher(null)} />
+      <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={nextVoucherNumber} suppliers={suppliers} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />
+      <VoucherEditorDialog isOpen={Boolean(editingVoucher)} voucher={editingVoucher} suppliers={suppliers} onSave={async (values) => { await onEdit(editingVoucher.id, values); setEditingVoucher(null); }} onClose={() => setEditingVoucher(null)} />
     </div>
   );
 }

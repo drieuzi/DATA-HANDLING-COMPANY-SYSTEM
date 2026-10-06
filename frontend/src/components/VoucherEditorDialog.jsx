@@ -8,7 +8,7 @@ const formatVoucherAmount = (value) => new Intl.NumberFormat("en-PH", {
   maximumFractionDigits: 2
 }).format(Number(value || 0));
 
-export default function VoucherEditorDialog({ isOpen, voucherNumber = "", voucher = null, suppliers, allowCancellation = true, onSave, onClose }) {
+export default function VoucherEditorDialog({ isOpen, voucherNumber = "", voucher = null, suppliers, onSave, onClose }) {
   const dialogRef = useRef(null);
   const [fields, setFields] = useState({});
   const [message, setMessage] = useState("");
@@ -61,12 +61,35 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
         const selected = availableTransactions.find((item) => String(item.id) === String(value));
         return { ...current, transactionId: value, amountApplied: selected ? String(selected.balance) : "" };
       }
+      if (name === "bankName") return { ...current, bankName: value.toUpperCase() };
       return { ...current, [name]: type === "checkbox" ? checked : value };
     });
   }
 
   async function submit(event) {
     event.preventDefault();
+    if (voucher) {
+      if (!fields.voucherDate || !fields.paymentDate || !fields.chequeDate
+        || !fields.status || fields.status === "Deleted") {
+        setMessage("Voucher date, payment date, cheque date, and a valid status are required.");
+        return;
+      }
+      setSaving(true);
+      setMessage("");
+      try {
+        await onSave({
+          voucherDate: fields.voucherDate,
+          paymentDate: fields.paymentDate,
+          chequeDate: fields.chequeDate,
+          status: fields.status
+        });
+      } catch (error) {
+        setMessage(error.message);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const amountApplied = Number(fields.amountApplied);
     if (!voucher && !displayedVoucherNumber) {
       setMessage("The next voucher number has not loaded. Close this form and try again.");
@@ -98,6 +121,7 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
         <button type="button" onClick={onClose} aria-label="Close voucher form">×</button>
       </div>
       <form className="record-form" onSubmit={submit}>
+        {voucher && <p className="record-form__message record-form__wide">Voucher date, payment date, cheque date, and status can be edited after creation.</p>}
         <label>Voucher Number<input value={displayedVoucherNumber} readOnly aria-readonly="true" /></label>
         <label>Supplier
           <select name="supplierId" value={fields.supplierId || ""} onChange={updateField} disabled={Boolean(voucher)} required>
@@ -113,24 +137,24 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
         </label>
         <label>Voucher Date<input type="date" name="voucherDate" value={fields.voucherDate || ""} onChange={updateField} required /></label>
         <label>Payment Date<input type="date" name="paymentDate" value={fields.paymentDate || ""} onChange={updateField} required /></label>
-        <label>Cheque Number<input name="chequeNumber" value={fields.chequeNumber || ""} onChange={updateField} required /></label>
+        <label>Cheque Number<input name="chequeNumber" value={fields.chequeNumber || ""} onChange={updateField} disabled={Boolean(voucher)} required /></label>
         <label>Cheque Date<input type="date" name="chequeDate" value={fields.chequeDate || ""} onChange={updateField} required /></label>
         <label>Full Payment Amount<input value={formatVoucherAmount(fields.amountApplied)} readOnly aria-readonly="true" required /></label>
         <label className="voucher-tax-toggle record-form__wide">
-          <input type="checkbox" name="applyWithholdingTax" checked={Boolean(fields.applyWithholdingTax)} onChange={updateField} />
+          <input type="checkbox" name="applyWithholdingTax" checked={Boolean(fields.applyWithholdingTax)} onChange={updateField} disabled={Boolean(voucher)} />
           Apply 1% withholding tax
         </label>
         <label>Withholding Tax (1%)<input value={formatVoucherAmount(withholdingTaxAmount)} readOnly aria-readonly="true" /></label>
-        <label>Bank Used<input name="bankName" value={fields.bankName || ""} onChange={updateField} placeholder="Example: BPI" required /></label>
+        <label>Bank Used<input name="bankName" value={fields.bankName || ""} onChange={updateField} disabled={Boolean(voucher)} placeholder="Example: BPI" required /></label>
         <label>Net Cheque Amount<input value={formatVoucherAmount(netChequeAmount)} readOnly aria-readonly="true" /></label>
         <label>Status
-          <select name="status" value={fields.status || "Draft"} onChange={updateField} disabled={Boolean(voucher && voucher.status === "Cancelled" && !allowCancellation)}>
+          <select name="status" value={fields.status || "Draft"} onChange={updateField} disabled={Boolean(voucher?.status === "Deleted")}>
             <option>Draft</option>
             <option>Issued</option>
-            {voucher && (allowCancellation || voucher.status === "Cancelled") && <option>Cancelled</option>}
+            <option>Cancelled</option>
           </select>
         </label>
-        <label className="record-form__wide">Particulars<textarea name="particulars" value={fields.particulars || ""} onChange={updateField} rows="3" /></label>
+        <label className="record-form__wide">Particulars<textarea name="particulars" value={fields.particulars || ""} onChange={updateField} disabled={Boolean(voucher)} rows="3" /></label>
         <p className="record-form__message record-form__wide" role="alert">{message}</p>
         <div className="record-form__actions record-form__wide"><button className="secondary-action" type="button" onClick={onClose}>Cancel</button><button className="primary-action" type="submit" disabled={saving}>{saving ? "Saving…" : voucher ? "Save Changes" : "Save Voucher"}</button></div>
       </form>

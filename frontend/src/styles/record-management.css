@@ -114,6 +114,12 @@
 .locked-record-message { margin: 26px; padding: 20px; border-radius: 16px; background: var(--white); font-weight: 800; line-height: 1.55; }
 
 .records-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 190px; gap: 12px; padding: 18px 24px; background: var(--white); }
+.records-toolbar--date-range { grid-template-columns: minmax(260px, 1fr) 160px 160px 180px; }
+.records-toolbar--voucher-date { grid-template-columns: minmax(260px, 1fr) 180px 180px; }
+.records-filter-field { display: grid; gap: 7px; min-width: 0; }
+.records-filter-field > span { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.records-filter-field input,
+.records-filter-field select { min-width: 0; }
 .row-actions { display: flex; gap: 6px; }
 .row-actions .danger-action { border-color: var(--red); color: var(--red); }
 .no-row-action { color: var(--muted); font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
@@ -231,7 +237,9 @@
   .heading-actions { align-items: flex-start; flex-direction: column; }
   .record-form { grid-template-columns: 1fr; padding: 20px; }
   .record-form__wide { grid-column: auto; }
-  .records-toolbar { grid-template-columns: 1fr; padding: 14px 18px; }
+  .records-toolbar,
+  .records-toolbar--date-range,
+  .records-toolbar--voucher-date { grid-template-columns: 1fr; padding: 14px 18px; }
   .detail-record-filters { grid-template-columns: 1fr; padding: 14px 16px; }
   .page-back-button { width: 100%; justify-content: center; }
 }

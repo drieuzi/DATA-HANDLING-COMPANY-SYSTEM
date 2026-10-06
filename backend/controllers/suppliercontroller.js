@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { writeAudit } = require("../services/auditservice");
+const { reverseIssuedVoucher } = require("../services/voucherservice");
 const HttpError = require("../utils/httpError");
 const validate = require("../utils/validation");
 
@@ -176,6 +177,32 @@ async function deleteSupplier(request, response, next) {
       [request.user.id, reason, supplierId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Supplier not found.");
+    const linkedVouchers = await client.query(
+      `SELECT * FROM vouchers
+       WHERE supplier_id = $1 AND deleted_at IS NULL
+       FOR UPDATE`,
+      [supplierId]
+    );
+    for (const voucher of linkedVouchers.rows) {
+      if (voucher.payment_status === "Issued") {
+        await reverseIssuedVoucher(client, request, voucher, `Supplier deleted: ${reason}`);
+      }
+    }
+    const deletedVouchers = await client.query(
+      `UPDATE vouchers SET payment_status = 'Deleted', deleted_at = NOW(),
+         deleted_by = $1, deletion_reason = $2, restore_allowed = TRUE,
+         deleted_with_transaction = TRUE, updated_at = NOW()
+       WHERE supplier_id = $3 AND deleted_at IS NULL
+       RETURNING id, voucher_number`,
+      [request.user.id, `Deleted with supplier: ${reason}`, supplierId]
+    );
+    for (const voucher of deletedVouchers.rows) {
+      await writeAudit(client, request, "VOUCHER_DELETED", "voucher", voucher.id, {
+        voucherNumber: voucher.voucher_number,
+        deletionMode: "deleted_with_supplier",
+        reason
+      });
+    }
     const linked = await client.query(
       `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
          deletion_reason = $2, restore_allowed = TRUE, deleted_with_company = TRUE
@@ -184,10 +211,11 @@ async function deleteSupplier(request, response, next) {
     );
     await writeAudit(client, request, "SUPPLIER_DELETED", "supplier", supplierId, {
       reason, name: result.rows[0].name, deletionMode: "restorable",
-      linkedTransactionsDeleted: linked.rowCount
+      linkedTransactionsDeleted: linked.rowCount,
+      linkedVouchersDeleted: deletedVouchers.rowCount
     });
     await client.query("COMMIT");
-    response.json({ message: `Supplier and ${linked.rowCount} linked transaction(s) moved to deleted records.` });
+    response.json({ message: `Supplier, ${linked.rowCount} transaction(s), and ${deletedVouchers.rowCount} voucher(s) moved to deleted records.` });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -213,11 +241,33 @@ async function restoreSupplier(request, response, next) {
        RETURNING id`,
       [supplierId]
     );
+    const restoredVouchers = await client.query(
+      `UPDATE vouchers SET payment_status = 'Draft', deleted_at = NULL,
+         deleted_by = NULL, deletion_reason = NULL, restore_allowed = TRUE,
+         deleted_with_transaction = FALSE, issued_by = NULL, issued_at = NULL,
+         cancelled_at = NULL, updated_at = NOW()
+       WHERE supplier_id = $1 AND deleted_with_transaction = TRUE
+         AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING id, voucher_number`,
+      [supplierId]
+    );
+    for (const voucher of restoredVouchers.rows) {
+      await writeAudit(client, request, "VOUCHER_RESTORED", "voucher", voucher.id, {
+        voucherNumber: voucher.voucher_number,
+        restoredAs: "Draft",
+        restorationMode: "restored_with_supplier"
+      });
+    }
     await writeAudit(client, request, "SUPPLIER_RESTORED", "supplier", supplierId, {
-      name: result.rows[0].name, linkedTransactionsRestored: linked.rowCount
+      name: result.rows[0].name,
+      linkedTransactionsRestored: linked.rowCount,
+      linkedVouchersRestoredAsDraft: restoredVouchers.rowCount
     });
     await client.query("COMMIT");
-    response.json({ supplier: mapSupplier(result.rows[0]), message: "Supplier restored." });
+    response.json({
+      supplier: mapSupplier(result.rows[0]),
+      message: `Supplier restored with ${restoredVouchers.rowCount} voucher(s) as Draft.`
+    });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -382,13 +432,45 @@ async function deleteTransaction(request, response, next) {
     const transactionId = validate.id(request.params.id, "Transaction ID");
     const reason = validate.text(request.body.reason, "Deletion reason", { required: true, max: 500 });
     await client.query("BEGIN");
-    const linked = await client.query(
-      `SELECT COUNT(*)::INTEGER AS count FROM vouchers
-       WHERE supplier_transaction_id = $1 AND deleted_at IS NULL`,
+    const transactionResult = await client.query(
+      `SELECT * FROM supplier_transactions
+       WHERE id = $1 AND deleted_at IS NULL
+       FOR UPDATE`,
       [transactionId]
     );
-    if (linked.rows[0].count > 0) {
-      throw new HttpError(409, "Cancel and delete every linked voucher before deleting this transaction.");
+    if (!transactionResult.rows[0]) throw new HttpError(404, "Transaction not found.");
+
+    const linkedVouchers = await client.query(
+      `SELECT * FROM vouchers
+       WHERE supplier_transaction_id = $1 AND deleted_at IS NULL
+       FOR UPDATE`,
+      [transactionId]
+    );
+    for (const voucher of linkedVouchers.rows) {
+      if (voucher.payment_status === "Issued") {
+        await reverseIssuedVoucher(
+          client,
+          request,
+          voucher,
+          `Supplier transaction deleted: ${reason}`
+        );
+      }
+    }
+    const deletedVouchers = await client.query(
+      `UPDATE vouchers SET payment_status = 'Deleted', deleted_at = NOW(),
+         deleted_by = $1, deletion_reason = $2, restore_allowed = TRUE,
+         deleted_with_transaction = TRUE, updated_at = NOW()
+       WHERE supplier_transaction_id = $3 AND deleted_at IS NULL
+       RETURNING id, voucher_number`,
+      [request.user.id, `Deleted with supplier transaction: ${reason}`, transactionId]
+    );
+    for (const voucher of deletedVouchers.rows) {
+      await writeAudit(client, request, "VOUCHER_DELETED", "voucher", voucher.id, {
+        voucherNumber: voucher.voucher_number,
+        transactionId: String(transactionId),
+        deletionMode: "deleted_with_transaction",
+        reason
+      });
     }
     const result = await client.query(
       `UPDATE supplier_transactions SET deleted_at = NOW(), deleted_by = $1,
@@ -396,12 +478,13 @@ async function deleteTransaction(request, response, next) {
        WHERE id = $3 AND deleted_at IS NULL RETURNING id`,
       [request.user.id, reason, transactionId]
     );
-    if (!result.rows[0]) throw new HttpError(404, "Transaction not found.");
     await writeAudit(client, request, "SUPPLIER_TRANSACTION_DELETED", "supplier_transaction", transactionId, {
-      reason, deletionMode: "restorable"
+      reason,
+      deletionMode: "restorable",
+      linkedVouchersDeleted: deletedVouchers.rowCount
     });
     await client.query("COMMIT");
-    response.json({ message: "Transaction moved to Admin Monitoring deleted records." });
+    response.json({ message: `Transaction and ${deletedVouchers.rowCount} linked voucher(s) moved to Admin Monitoring.` });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -423,9 +506,32 @@ async function restoreTransaction(request, response, next) {
       [transactionId]
     );
     if (!result.rows[0]) throw new HttpError(404, "Deleted transaction or active supplier not found.");
-    await writeAudit(client, request, "SUPPLIER_TRANSACTION_RESTORED", "supplier_transaction", transactionId);
+    const restoredVouchers = await client.query(
+      `UPDATE vouchers SET payment_status = 'Draft', deleted_at = NULL,
+         deleted_by = NULL, deletion_reason = NULL, restore_allowed = TRUE,
+         deleted_with_transaction = FALSE, issued_by = NULL, issued_at = NULL,
+         cancelled_at = NULL, updated_at = NOW()
+       WHERE supplier_transaction_id = $1 AND deleted_with_transaction = TRUE
+         AND deleted_at IS NOT NULL AND restore_allowed = TRUE
+       RETURNING id, voucher_number`,
+      [transactionId]
+    );
+    for (const voucher of restoredVouchers.rows) {
+      await writeAudit(client, request, "VOUCHER_RESTORED", "voucher", voucher.id, {
+        voucherNumber: voucher.voucher_number,
+        transactionId: String(transactionId),
+        restoredAs: "Draft",
+        restorationMode: "restored_with_transaction"
+      });
+    }
+    await writeAudit(client, request, "SUPPLIER_TRANSACTION_RESTORED", "supplier_transaction", transactionId, {
+      linkedVouchersRestoredAsDraft: restoredVouchers.rowCount
+    });
     await client.query("COMMIT");
-    response.json({ transaction: mapTransaction(result.rows[0]), message: "Transaction restored." });
+    response.json({
+      transaction: mapTransaction(result.rows[0]),
+      message: `Transaction restored with ${restoredVouchers.rowCount} linked voucher(s) as Draft.`
+    });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
