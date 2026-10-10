@@ -8,7 +8,13 @@ export async function listVouchers(includeDeleted = false) {
     amountApplied: Number(voucher.amountApplied || 0),
     withholdingTaxRate: Number(voucher.withholdingTaxRate || 0),
     withholdingTaxAmount: Number(voucher.withholdingTaxAmount || 0),
-    netChequeAmount: Number(voucher.netChequeAmount ?? voucher.amountApplied ?? 0)
+    netChequeAmount: Number(voucher.netChequeAmount ?? voucher.amountApplied ?? 0),
+    transactionIds: Array.isArray(voucher.transactionIds) ? voucher.transactionIds.map(String) : [String(voucher.transactionId)],
+    transactions: (Array.isArray(voucher.transactions) ? voucher.transactions : []).map((transaction) => ({
+      ...transaction,
+      id: String(transaction.id),
+      amountApplied: Number(transaction.amountApplied || 0)
+    }))
   }));
 }
 

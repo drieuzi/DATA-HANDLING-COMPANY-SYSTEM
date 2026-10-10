@@ -67,7 +67,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "long", day: "numeric" }).format(date);
 }
 
-export function downloadVoucherForPrint({ voucher, supplier, transaction, preparedBy }) {
+export function downloadVoucherForPrint({ voucher, supplier, transactions = [], transaction, preparedBy }) {
   const printWindow = window.open("", "_blank", "width=1200,height=850");
   if (!printWindow) {
     throw new Error("The printable voucher was blocked. Allow pop-ups for this website, then try Download again.");
@@ -78,7 +78,7 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
   const withholdingTaxRate = Number(voucher.withholdingTaxRate || 0);
   const withholdingTaxAmount = Number.isFinite(Number(voucher.withholdingTaxAmount))
     ? Number(voucher.withholdingTaxAmount)
-    : Math.round(amount * withholdingTaxRate * 100) / 100;
+    : Math.round((amount / 1.12) * withholdingTaxRate * 100) / 100;
   const netChequeAmount = Number.isFinite(Number(voucher.netChequeAmount))
     ? Number(voucher.netChequeAmount)
     : Math.max(amount - withholdingTaxAmount, 0);
@@ -88,12 +88,23 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
   const bankName = voucher.bankName?.trim() || "Bank used";
   const supplierName = supplier?.name || voucher.supplierName || "";
   const contactPerson = supplier?.contactPerson || "";
-  const purchaseOrder = transaction?.purchaseOrder || voucher.purchaseOrder || "";
-  const salesInvoice = transaction?.salesInvoice || voucher.salesInvoice || "";
-  const paymentReference = [
-    salesInvoice && salesInvoice !== "—" ? `S.I. ${salesInvoice}` : "",
-    purchaseOrder && purchaseOrder !== "—" ? `P.O. ${purchaseOrder}` : ""
+  const sourceTransactions = transactions.length ? transactions : (transaction ? [transaction] : []);
+  const linkedTransactions = sourceTransactions.length
+    ? sourceTransactions.map((item) => {
+      const voucherLink = voucher.transactions?.find((linked) => String(linked.id) === String(item.id));
+      return { ...item, amountApplied: Number(voucherLink?.amountApplied ?? item.amountApplied ?? item.amount ?? 0) };
+    })
+    : (voucher.transactions || []);
+  const referenceFor = (item) => [
+    item?.salesInvoice && item.salesInvoice !== "—" ? `S.I. ${item.salesInvoice}` : "",
+    item?.purchaseOrder && item.purchaseOrder !== "—" ? `P.O. ${item.purchaseOrder}` : ""
   ].filter(Boolean).join(" / ");
+  const paymentReference = linkedTransactions.length
+    ? linkedTransactions.map(referenceFor).filter(Boolean).join("; ")
+    : [voucher.salesInvoice && `S.I. ${voucher.salesInvoice}`, voucher.purchaseOrder && `P.O. ${voucher.purchaseOrder}`].filter(Boolean).join(" / ");
+  const payableRows = linkedTransactions.length
+    ? linkedTransactions.map((item) => `<tr><td>Accounts payable – trade — ${escapeHtml(referenceFor(item) || `Transaction ${item.id}`)}</td><td class="numeric">${escapeHtml(formatMoney(item.amountApplied))}</td><td></td></tr>`).join("")
+    : `<tr><td>Accounts payable – trade</td><td class="numeric">${escapeHtml(formatMoney(totalCreditAmount))}</td><td></td></tr>`;
   const particulars = paymentReference
     ? `Payment for ${paymentReference}`
     : (voucher.particulars?.trim() || "Payment for supplier transaction");
@@ -178,8 +189,7 @@ export function downloadVoucherForPrint({ voucher, supplier, transaction, prepar
           <table>
             <thead><tr><th>Description</th><th>Debit</th><th>Credit</th></tr></thead>
             <tbody>
-              <tr><td>Accounts payable – trade</td><td class="numeric">${escapeHtml(formatMoney(totalCreditAmount))}</td><td></td></tr>
-              <tr><td>${escapeHtml(paymentReference || "Supplier transaction")}</td><td></td><td></td></tr>
+              ${payableRows}
               <tr><td>Withholding tax (1%)</td><td></td><td class="numeric">${escapeHtml(formatMoney(withholdingTaxAmount))}</td></tr>
               <tr><td>${escapeHtml(bankName)}</td><td></td><td class="numeric">${escapeHtml(formatMoney(netChequeAmount))}</td></tr>
             </tbody>

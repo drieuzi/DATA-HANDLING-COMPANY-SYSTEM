@@ -109,6 +109,20 @@
 .record-form .voucher-tax-toggle { display: flex; align-items: center; grid-template-columns: none; flex-direction: row; gap: 10px; padding: 12px 14px; border: 2px solid var(--border); border-radius: 12px; background: var(--white); }
 .record-form .voucher-tax-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--orange); }
 .record-form__wide { grid-column: 1 / -1; }
+.table-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 16px; border-top: 1px solid var(--border); background: var(--white); }
+.table-pagination button { min-width: 38px; padding: 8px 11px; border: 2px solid var(--border); border-radius: 9px; background: var(--white); color: var(--black); font-weight: 800; cursor: pointer; transition: background .18s ease, color .18s ease, transform .18s ease; }
+.table-pagination button:hover:not(:disabled), .table-pagination button.is-active { background: var(--orange); color: var(--black); transform: translateY(-1px); }
+.table-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.table-pagination__pages { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.table-pagination > span { width: 100%; color: var(--muted); font-size: .76rem; font-weight: 800; text-align: center; }
+.voucher-transaction-picker { margin: 0; padding: 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--white); }
+.voucher-transaction-picker legend { padding: 0 6px; font-weight: 900; }
+.record-form .voucher-transaction-option { display: flex; grid-template-columns: none; flex-direction: row; align-items: center; gap: 12px; padding: 10px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.voucher-transaction-option:last-of-type { border-bottom: 0; }
+.record-form .voucher-transaction-option input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--orange); }
+.voucher-transaction-option span { display: flex; justify-content: space-between; gap: 16px; width: 100%; }
+.voucher-transaction-option small { font-weight: 900; white-space: nowrap; }
+.voucher-transaction-empty { margin: 4px; color: var(--muted); }
 .record-form__message { min-height: 18px; margin: 0; color: var(--red); font-size: .78rem; font-weight: 800; }
 .record-form__actions { display: flex; justify-content: flex-end; gap: 10px; }
 .locked-record-message { margin: 26px; padding: 20px; border-radius: 16px; background: var(--white); font-weight: 800; line-height: 1.55; }

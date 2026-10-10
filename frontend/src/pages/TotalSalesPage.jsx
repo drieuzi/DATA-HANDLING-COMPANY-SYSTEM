@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
@@ -56,6 +58,7 @@ export default function TotalSalesPage({ clients, onBack }) {
     const searchText = `${transaction.companyName} ${transaction.purchaseOrder} ${transaction.collectionReceipt || ""} ${transaction.date || ""}`.toLowerCase();
     return searchText.includes(query.toLowerCase());
   }), [monthlyRows, query]);
+  const pagination = useTablePagination(rows, [query, selectedMonth]);
 
   const monthlyTotal = monthlyRows.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
 
@@ -111,7 +114,7 @@ export default function TotalSalesPage({ clients, onBack }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.length ? rows.map((transaction) => (
+                {rows.length ? pagination.pageItems.map((transaction) => (
                   <tr key={`${transaction.companyId}-${transaction.id}`}>
                     <td>{transaction.companyName}</td>
                     <td>{transaction.collectionReceipt || "—"}</td>
@@ -134,6 +137,7 @@ export default function TotalSalesPage({ clients, onBack }) {
               </tfoot>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />
         </section>
       </main>
     </div>

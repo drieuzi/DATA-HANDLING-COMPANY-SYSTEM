@@ -11,33 +11,42 @@ async function lockVoucher(client, voucherId) {
   return result.rows[0];
 }
 
-async function lockTransaction(client, transactionId) {
+const cents = (value) => Math.round(Number(value || 0) * 100);
+
+async function lockSelectedTransactions(client, transactionIds) {
   const result = await client.query(
     `SELECT st.*, s.deleted_at AS supplier_deleted_at
      FROM supplier_transactions st
      JOIN suppliers s ON s.id = st.supplier_id
-     WHERE st.id = $1 AND st.deleted_at IS NULL
+     WHERE st.id = ANY($1::BIGINT[])
+     ORDER BY st.id
      FOR UPDATE OF st`,
-    [transactionId]
+    [transactionIds]
   );
-  if (!result.rows[0] || result.rows[0].supplier_deleted_at) {
-    throw new HttpError(404, "Active supplier transaction not found.");
+  if (result.rows.length !== transactionIds.length
+    || result.rows.some((row) => row.deleted_at || row.supplier_deleted_at)) {
+    throw new HttpError(404, "One or more selected supplier transactions are no longer active.");
   }
-  return result.rows[0];
+  return result.rows;
 }
 
-async function lockTransactionForReversal(client, transactionId) {
+async function lockVoucherTransactions(client, voucherId, requireActive = true) {
   const result = await client.query(
-    `SELECT *
-     FROM supplier_transactions
-     WHERE id = $1
-     FOR UPDATE`,
-    [transactionId]
+    `SELECT st.*, vt.amount_applied
+     FROM voucher_transactions vt
+     JOIN supplier_transactions st ON st.id = vt.supplier_transaction_id
+     JOIN suppliers s ON s.id = st.supplier_id
+     WHERE vt.voucher_id = $1
+       AND ($2::BOOLEAN = FALSE OR (st.deleted_at IS NULL AND s.deleted_at IS NULL))
+     ORDER BY st.id FOR UPDATE OF st`,
+    [voucherId, requireActive]
   );
-  if (!result.rows[0]) {
-    throw new HttpError(409, "The voucher's linked supplier transaction no longer exists.");
+  if (!result.rows.length) {
+    throw new HttpError(requireActive ? 404 : 409,
+      requireActive ? "Active linked supplier transactions were not found."
+        : "The voucher's linked supplier transactions no longer exist.");
   }
-  return result.rows[0];
+  return result.rows;
 }
 
 async function reserveVoucherNumber(client) {
@@ -61,12 +70,15 @@ async function issueLockedVoucher(client, request, voucher) {
     throw new HttpError(400, "Payment date is required before issuing a voucher.");
   }
 
-  const transaction = await lockTransaction(client, voucher.supplier_transaction_id);
-  const paymentAmount = Number(voucher.payment_amount);
-  const balance = Number(transaction.balance);
-  if (paymentAmount <= 0) throw new HttpError(400, "Payment must be greater than zero.");
-  if (paymentAmount !== balance) {
-    throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${balance.toFixed(2)}.`);
+  const transactions = await lockVoucherTransactions(client, voucher.id);
+  const linkedTotal = transactions.reduce((sum, row) => sum + Number(row.amount_applied), 0);
+  if (cents(linkedTotal) !== cents(voucher.payment_amount)) {
+    throw new HttpError(409, "The linked transaction total no longer matches the voucher amount.");
+  }
+  for (const transaction of transactions) {
+    if (cents(transaction.amount_applied) !== cents(transaction.balance)) {
+      throw new HttpError(409, `Transaction ${transaction.id} must be paid in full. Its current balance is ${Number(transaction.balance).toFixed(2)}.`);
+    }
   }
 
   await client.query(
@@ -75,31 +87,31 @@ async function issueLockedVoucher(client, request, voucher) {
      WHERE id = $2`,
     [request.user.id, voucher.id]
   );
-  await client.query(
-    `INSERT INTO payments (
-       voucher_id, supplier_transaction_id, supplier_id, amount,
-       payment_date, recorded_by
-     ) VALUES ($1, $2, $3, $4, $5, $6)`,
-    [voucher.id, transaction.id, transaction.supplier_id, voucher.payment_amount, voucher.payment_date, request.user.id]
-  );
-  const updated = await client.query(
-    `UPDATE supplier_transactions SET
-       balance = balance - $1,
-       voucher_date = $2,
-       payment_date = $3,
-       cheque_date = $4
-     WHERE id = $5
-     RETURNING id, amount, balance, billing_status`,
-    [voucher.payment_amount, voucher.voucher_date, voucher.payment_date, voucher.cheque_date, transaction.id]
-  );
+  for (const transaction of transactions) {
+    await client.query(
+      `INSERT INTO payments (
+         voucher_id, supplier_transaction_id, supplier_id, amount,
+         payment_date, recorded_by
+       ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [voucher.id, transaction.id, transaction.supplier_id,
+        transaction.amount_applied, voucher.payment_date, request.user.id]
+    );
+    await client.query(
+      `UPDATE supplier_transactions SET balance = balance - $1,
+         voucher_date = $2, payment_date = $3, cheque_date = $4
+       WHERE id = $5`,
+      [transaction.amount_applied, voucher.voucher_date,
+        voucher.payment_date, voucher.cheque_date, transaction.id]
+    );
+  }
   await writeAudit(client, request, "VOUCHER_ISSUED", "voucher", voucher.id, {
     voucherNumber: voucher.voucher_number,
-    transactionId: transaction.id,
+    transactionIds: transactions.map((row) => String(row.id)),
+    transactionCount: transactions.length,
     paymentAmount: voucher.payment_amount,
-    newBalance: updated.rows[0].balance,
-    billingStatus: updated.rows[0].billing_status
+    billingStatus: "Paid"
   });
-  return updated.rows[0];
+  return transactions;
 }
 
 async function reverseIssuedVoucher(client, request, voucher, reason) {
@@ -107,63 +119,50 @@ async function reverseIssuedVoucher(client, request, voucher, reason) {
   // be reversible after the related supplier or transaction has been soft
   // deleted. Creating, issuing, and editing continue to use lockTransaction(),
   // which intentionally requires an active supplier and transaction.
-  const transaction = await lockTransactionForReversal(
-    client,
-    voucher.supplier_transaction_id
-  );
+  const transactions = await lockVoucherTransactions(client, voucher.id, false);
   const paymentResult = await client.query(
     `SELECT * FROM payments
      WHERE voucher_id = $1 AND reversed_at IS NULL
+     ORDER BY supplier_transaction_id
      FOR UPDATE`,
     [voucher.id]
   );
-  const payment = paymentResult.rows[0];
-  if (!payment) throw new HttpError(409, "The issued voucher payment history could not be found.");
-
-  await client.query(
-    `UPDATE payments SET reversed_at = NOW(), reversed_by = $1,
-       reversal_reason = $2 WHERE id = $3`,
-    [request.user.id, reason, payment.id]
-  );
-  const restored = await client.query(
-    `UPDATE supplier_transactions SET
-       balance = LEAST(amount, balance + $1),
-       voucher_date = (
-         SELECT v.voucher_date FROM vouchers v
-         WHERE v.supplier_transaction_id = $2 AND v.id <> $3
-           AND v.payment_status = 'Issued' AND v.deleted_at IS NULL
-         ORDER BY v.issued_at DESC LIMIT 1
-       ),
-       payment_date = (
-         SELECT p.payment_date FROM payments p
-         JOIN vouchers v ON v.id = p.voucher_id
-         WHERE p.supplier_transaction_id = $2 AND p.reversed_at IS NULL
-           AND v.id <> $3 AND v.payment_status = 'Issued' AND v.deleted_at IS NULL
-         ORDER BY p.created_at DESC LIMIT 1
-       ),
-       cheque_date = (
-         SELECT v.cheque_date FROM vouchers v
-         WHERE v.supplier_transaction_id = $2 AND v.id <> $3
-           AND v.payment_status = 'Issued' AND v.deleted_at IS NULL
-         ORDER BY v.issued_at DESC LIMIT 1
-       )
-     WHERE id = $2
-     RETURNING balance`,
-    [payment.amount, transaction.id, voucher.id]
-  );
-  return Number(restored.rows[0].balance);
+  if (!paymentResult.rows.length) throw new HttpError(409, "The issued voucher payment history could not be found.");
+  const knownIds = new Set(transactions.map((row) => String(row.id)));
+  for (const payment of paymentResult.rows) {
+    if (!knownIds.has(String(payment.supplier_transaction_id))) {
+      throw new HttpError(409, "A linked supplier transaction no longer exists.");
+    }
+    await client.query(
+      `UPDATE payments SET reversed_at = NOW(), reversed_by = $1,
+         reversal_reason = $2 WHERE id = $3`,
+      [request.user.id, reason, payment.id]
+    );
+    await client.query(
+      `UPDATE supplier_transactions SET
+         balance = LEAST(amount, balance + $1),
+         voucher_date = NULL, payment_date = NULL, cheque_date = NULL
+       WHERE id = $2`,
+      [payment.amount, payment.supplier_transaction_id]
+    );
+  }
+  return paymentResult.rows;
 }
 
 async function createVoucherWithPayment(request, values) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const transaction = await lockTransaction(client, values.supplierTransactionId);
-    if (Number(transaction.supplier_id) !== Number(values.supplierId)) {
-      throw new HttpError(400, "The selected supplier does not own that transaction.");
+    const transactions = await lockSelectedTransactions(client, values.supplierTransactionIds);
+    if (transactions.some((transaction) => Number(transaction.supplier_id) !== Number(values.supplierId))) {
+      throw new HttpError(400, "Every selected transaction must belong to the selected supplier.");
     }
-    if (Number(values.paymentAmount) !== Number(transaction.balance)) {
-      throw new HttpError(409, `Partial payments are not allowed. Payment must equal the full remaining balance of ${Number(transaction.balance).toFixed(2)}.`);
+    if (transactions.some((transaction) => Number(transaction.balance) <= 0)) {
+      throw new HttpError(409, "Only unpaid supplier transactions can be included in a voucher.");
+    }
+    const paymentAmount = transactions.reduce((sum, transaction) => sum + Number(transaction.balance), 0);
+    if (cents(values.paymentAmount) !== cents(paymentAmount)) {
+      throw new HttpError(409, `The selected full balances total ${paymentAmount.toFixed(2)}. Refresh the form and try again.`);
     }
     const voucherNumber = await reserveVoucherNumber(client);
     const result = await client.query(
@@ -175,17 +174,26 @@ async function createVoucherWithPayment(request, values) {
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Draft', $11, $12, $13)
        RETURNING *`,
       [
-        voucherNumber, values.supplierTransactionId, values.supplierId,
+        voucherNumber, transactions[0].id, values.supplierId,
         values.voucherDate, values.chequeDate, values.chequeNumber,
-        values.paymentDate, values.paymentAmount, values.withholdingTaxRate,
+        values.paymentDate, paymentAmount, values.withholdingTaxRate,
         values.bankName, values.particulars, values.attachmentName, request.user.id
       ]
     );
     const voucher = result.rows[0];
+    for (const transaction of transactions) {
+      await client.query(
+        `INSERT INTO voucher_transactions (
+           voucher_id, supplier_transaction_id, supplier_id, amount_applied
+         ) VALUES ($1, $2, $3, $4)`,
+        [voucher.id, transaction.id, transaction.supplier_id, transaction.balance]
+      );
+    }
     await writeAudit(client, request, "VOUCHER_CREATED", "voucher", voucher.id, {
       voucherNumber: voucher.voucher_number,
-      transactionId: voucher.supplier_transaction_id,
-      paymentAmount: voucher.payment_amount,
+      transactionIds: transactions.map((transaction) => String(transaction.id)),
+      transactionCount: transactions.length,
+      paymentAmount,
       withholdingTaxAmount: voucher.withholding_tax_amount,
       bankName: voucher.bank_name
     });
@@ -272,9 +280,12 @@ async function updateVoucherDetails(request, voucherId, values) {
       await client.query(
         `UPDATE supplier_transactions
          SET voucher_date = $1, payment_date = $2, cheque_date = $3
-         WHERE id = $4`,
+         WHERE id IN (
+           SELECT supplier_transaction_id FROM voucher_transactions
+           WHERE voucher_id = $4
+         )`,
         [values.voucherDate, values.paymentDate, values.chequeDate,
-          voucher.supplier_transaction_id]
+          voucher.id]
       );
     }
     await writeAudit(client, request, "VOUCHER_UPDATED", "voucher", voucher.id, {
@@ -393,6 +404,11 @@ async function permanentlyDeleteVoucher(request, voucherId, reason) {
       throw new HttpError(404, "Restorable deleted voucher not found.");
     }
 
+    const links = await client.query(
+      "SELECT supplier_transaction_id FROM voucher_transactions WHERE voucher_id = $1 ORDER BY supplier_transaction_id",
+      [voucherId]
+    );
+
     const payments = await client.query(
       "SELECT id, reversed_at FROM payments WHERE voucher_id = $1 FOR UPDATE",
       [voucherId]
@@ -412,7 +428,7 @@ async function permanentlyDeleteVoucher(request, voucherId, reason) {
 
     await writeAudit(client, request, "PERMANENT_PURGE", "voucher", voucher.id, {
       voucherNumber: voucher.voucher_number,
-      transactionId: String(voucher.supplier_transaction_id),
+      transactionIds: links.rows.map((row) => String(row.supplier_transaction_id)),
       supplierId: String(voucher.supplier_id),
       reason,
       status: "Unrestorable",

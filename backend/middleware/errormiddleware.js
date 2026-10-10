@@ -16,8 +16,8 @@ function errorHandler(error, _request, response, _next) {
     if (error.constraint === "vouchers_number_lower_unique") {
       return response.status(409).json({ message: "That voucher number already exists." });
     }
-    if (error.constraint === "payments_one_active_voucher_unique") {
-      return response.status(409).json({ message: "This voucher already has an active payment." });
+    if (["payments_one_active_voucher_transaction_unique", "payments_one_active_supplier_transaction_unique"].includes(error.constraint)) {
+      return response.status(409).json({ message: "One of the selected transactions already has an active voucher payment." });
     }
     if (error.constraint === "client_payments_one_current_transaction_unique") {
       return response.status(409).json({ message: "This client transaction already has a pending or deposited cheque." });

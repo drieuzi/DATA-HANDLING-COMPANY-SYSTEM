@@ -3,6 +3,8 @@ import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import ClientEditorDialog from "../components/ClientEditorDialog.jsx";
 import ReceivablesPage from "./ReceivablesPage.jsx";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 export default function ClientsPage({
   clients,
@@ -33,6 +35,7 @@ export default function ClientsPage({
       const status = client.deletedAt ? "deleted" : client.billingStatus?.toLowerCase();
       return status === statusFilter;
     });
+  const pagination = useTablePagination(visibleClients, [companySearch, statusFilter, activeTab]);
 
 
   return (
@@ -115,7 +118,7 @@ export default function ClientsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleClients.map((client) => (
+                    {pagination.pageItems.map((client) => (
                       <tr className={client.deletedAt ? "is-deleted" : ""} key={client.id}>
                         <td>
                           <button
@@ -144,6 +147,7 @@ export default function ClientsPage({
                   </tbody>
                 </table>
               </div>
+              <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={visibleClients.length} onPageChange={pagination.setCurrentPage} />
             </section>
           </div>
         )}

@@ -29,6 +29,7 @@ function formatDateTime(value) {
 }
 
 export default function RecentAuditTable({ logs = [], title = "Recent Audit Activity", renderActions }) {
+  const pagination = useTablePagination(logs, [logs]);
   return (
     <section className="recent-audit-card" aria-label={title}>
       <div className="recent-audit-heading">
@@ -51,7 +52,7 @@ export default function RecentAuditTable({ logs = [], title = "Recent Audit Acti
             </tr>
           </thead>
           <tbody>
-            {logs.length ? logs.map((log) => {
+            {logs.length ? pagination.pageItems.map((log) => {
               const actions = renderActions?.(log);
               return (
                 <tr key={log.id}>
@@ -68,6 +69,10 @@ export default function RecentAuditTable({ logs = [], title = "Recent Audit Acti
           </tbody>
         </table>
       </div>
+      <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={logs.length} onPageChange={pagination.setCurrentPage} />
     </section>
   );
 }
+import TablePagination from "./TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
+

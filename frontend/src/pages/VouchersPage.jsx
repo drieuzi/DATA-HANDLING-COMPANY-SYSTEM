@@ -6,6 +6,8 @@ import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 import { downloadVoucherForPrint } from "../utils/voucherDocument.js";
 import { getNextVoucherNumber } from "../services/voucherApi.js";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 function voucherStatus(voucher) {
   return voucher?.deletedAt ? "Deleted" : (voucher?.status || "Draft");
@@ -39,6 +41,7 @@ export default function VouchersPage({
     const haystack = `${voucher.voucherNumber} ${voucher.supplierName} ${voucher.purchaseOrder} ${voucher.salesInvoice}`.toLowerCase();
     return matchesStatus && matchesDate && haystack.includes(query.trim().toLowerCase());
   }), [vouchers, query, status, voucherDate]);
+  const pagination = useTablePagination(filtered, [query, status, voucherDate]);
   const issued = vouchers.filter((item) => voucherStatus(item) === "Issued");
   const cancelled = vouchers.filter((item) => voucherStatus(item) === "Cancelled");
   const totalCount = vouchers.filter((item) => !item.deletedAt).length;
@@ -65,12 +68,13 @@ export default function VouchersPage({
 
   function downloadVoucher(voucher) {
     const supplier = suppliers.find((item) => String(item.id) === String(voucher.supplierId));
-    const transaction = supplier?.transactions.find((item) => String(item.id) === String(voucher.transactionId));
+    const linkedIds = (voucher.transactionIds || [voucher.transactionId]).map(String);
+    const transactions = supplier?.transactions.filter((item) => linkedIds.includes(String(item.id))) || [];
     try {
       downloadVoucherForPrint({
         voucher,
         supplier,
-        transaction,
+        transactions,
         preparedBy: user?.fullName || user?.username || ""
       });
     } catch (error) {
@@ -105,7 +109,7 @@ export default function VouchersPage({
             <label className="records-filter-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Cancelled</option></select></label>
           </div>
           <div className="financial-table-wrapper"><table className="financial-record-table voucher-table"><thead><tr><th>Voucher #</th><th>Supplier</th><th>P.O. #</th><th>S.I. #</th><th>Voucher Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>{filtered.length ? filtered.map((voucher) => {
+            <tbody>{filtered.length ? pagination.pageItems.map((voucher) => {
               const effectiveStatus = voucherStatus(voucher);
               return (
               <tr className={voucher.deletedAt ? "is-deleted" : ""} key={voucher.id}>
@@ -121,6 +125,7 @@ export default function VouchersPage({
               );
             }) : <tr><td colSpan="8" className="financial-records-empty">No voucher records found.</td></tr>}</tbody>
           </table></div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={filtered.length} onPageChange={pagination.setCurrentPage} />
         </section>
       </main>
       <VoucherEditorDialog isOpen={dialogOpen} voucherNumber={nextVoucherNumber} suppliers={suppliers} onSave={async (values) => { await onCreate(values); setDialogOpen(false); }} onClose={() => setDialogOpen(false)} />

@@ -11,11 +11,23 @@ const HttpError = require("../utils/httpError");
 const validate = require("../utils/validation");
 
 function mapVoucher(row) {
+  const transactions = (Array.isArray(row.linked_transactions) ? row.linked_transactions : [])
+    .map((transaction) => ({
+      id: String(transaction.id),
+      purchaseOrder: transaction.purchaseOrder || "—",
+      salesInvoice: transaction.salesInvoice || "—",
+      amountApplied: Number(transaction.amountApplied || 0)
+    }));
+  const firstTransaction = transactions[0] || {};
   return {
     id: String(row.id), voucherNumber: row.voucher_number,
-    transactionId: String(row.supplier_transaction_id), supplierId: String(row.supplier_id),
-    supplierName: row.supplier_name, purchaseOrder: row.purchase_order_number || "—",
-    salesInvoice: row.sales_invoice_number || "—", voucherDate: row.voucher_date,
+    transactionId: String(firstTransaction.id || row.supplier_transaction_id),
+    transactionIds: transactions.length ? transactions.map((transaction) => transaction.id) : [String(row.supplier_transaction_id)],
+    transactions,
+    supplierId: String(row.supplier_id), supplierName: row.supplier_name,
+    purchaseOrder: transactions.length ? transactions.map((transaction) => transaction.purchaseOrder).join(", ") : (row.purchase_order_number || "—"),
+    salesInvoice: transactions.length ? transactions.map((transaction) => transaction.salesInvoice).join(", ") : (row.sales_invoice_number || "—"),
+    voucherDate: row.voucher_date,
     chequeDate: row.cheque_date || "—", chequeNumber: row.cheque_number || "—",
     paymentDate: row.payment_date || "—", amountApplied: Number(row.payment_amount || 0),
     withholdingTaxRate: Number(row.withholding_tax_rate || 0),
@@ -29,6 +41,22 @@ function mapVoucher(row) {
     createdAt: row.created_at, updatedAt: row.updated_at
   };
 }
+
+const voucherSelect = `SELECT v.*, s.name AS supplier_name,
+  links.linked_transactions
+ FROM vouchers v
+ JOIN suppliers s ON s.id = v.supplier_id
+ LEFT JOIN LATERAL (
+   SELECT json_agg(json_build_object(
+     'id', st.id,
+     'purchaseOrder', COALESCE(st.purchase_order_number, '—'),
+     'salesInvoice', COALESCE(st.sales_invoice_number, '—'),
+     'amountApplied', vt.amount_applied
+   ) ORDER BY st.created_at, st.id) AS linked_transactions
+   FROM voucher_transactions vt
+   JOIN supplier_transactions st ON st.id = vt.supplier_transaction_id
+   WHERE vt.voucher_id = v.id
+ ) links ON TRUE`;
 
 async function listPayables(request, response, next) {
   try {
@@ -57,11 +85,7 @@ async function listVouchers(request, response, next) {
   try {
     const includeDeleted = request.user.role === "admin" && request.query.includeDeleted === "true";
     const result = await pool.query(
-      `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
-         st.sales_invoice_number
-       FROM vouchers v
-       JOIN suppliers s ON s.id = v.supplier_id
-       JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+      `${voucherSelect}
        WHERE v.deleted_at IS NULL OR ($1::BOOLEAN AND v.restore_allowed = TRUE)
        ORDER BY v.created_at DESC, v.id DESC`,
       [includeDeleted]
@@ -90,11 +114,7 @@ async function getVoucher(request, response, next) {
   try {
     const voucherId = validate.id(request.params.id, "Voucher ID");
     const result = await pool.query(
-      `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
-         st.sales_invoice_number
-       FROM vouchers v
-       JOIN suppliers s ON s.id = v.supplier_id
-       JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+      `${voucherSelect}
        WHERE v.id = $1 AND (v.deleted_at IS NULL OR ($2 = 'admin' AND v.restore_allowed = TRUE))`,
       [voucherId, request.user.role]
     );
@@ -109,8 +129,13 @@ function voucherValues(body, { allowCancelled = false } = {}) {
   if (!allowedStatuses.includes(paymentStatus)) {
     throw new HttpError(400, `Voucher status must be ${allowedStatuses.join(", ")}.`);
   }
+  const rawIds = Array.isArray(body.transactionIds || body.supplierTransactionIds)
+    ? (body.transactionIds || body.supplierTransactionIds)
+    : [body.transactionId || body.supplierTransactionId];
+  const supplierTransactionIds = [...new Set(rawIds.map((id) => validate.id(id, "Supplier transaction ID")))];
+  if (!supplierTransactionIds.length) throw new HttpError(400, "Select at least one supplier transaction.");
   return {
-    supplierTransactionId: validate.id(body.transactionId || body.supplierTransactionId, "Supplier transaction ID"),
+    supplierTransactionIds,
     supplierId: validate.id(body.supplierId, "Supplier ID"),
     voucherDate: validate.date(body.voucherDate, "Voucher date", { required: true }),
     chequeDate: validate.date(body.chequeDate, "Cheque date"),
@@ -147,11 +172,7 @@ async function createVoucher(request, response, next) {
   try {
     const voucherId = await createVoucherWithPayment(request, voucherValues(request.body));
     const result = await pool.query(
-      `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
-         st.sales_invoice_number
-       FROM vouchers v JOIN suppliers s ON s.id = v.supplier_id
-       JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
-       WHERE v.id = $1`,
+      `${voucherSelect} WHERE v.id = $1`,
       [voucherId]
     );
     response.status(201).json({ voucher: mapVoucher(result.rows[0]) });
@@ -171,11 +192,7 @@ async function updateVoucher(request, response, next) {
     const voucherId = validate.id(request.params.id, "Voucher ID");
     await updateVoucherDetails(request, voucherId, voucherEditValues(request.body));
     const result = await pool.query(
-      `SELECT v.*, s.name AS supplier_name, st.purchase_order_number,
-         st.sales_invoice_number
-       FROM vouchers v JOIN suppliers s ON s.id = v.supplier_id
-       JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
-       WHERE v.id = $1`,
+      `${voucherSelect} WHERE v.id = $1`,
       [voucherId]
     );
     response.json({ voucher: mapVoucher(result.rows[0]) });
@@ -216,27 +233,34 @@ async function restoreVoucher(request, response, next) {
          deleted_with_transaction = FALSE,
          issued_by = NULL, issued_at = NULL, cancelled_at = NULL,
          permanently_deleted_by = NULL, permanently_deleted_at = NULL
-       FROM supplier_transactions st, suppliers s
+       FROM suppliers s
        WHERE v.id = $1 AND v.payment_status = 'Deleted'
          AND v.deleted_at IS NOT NULL AND v.restore_allowed = TRUE
-         AND v.supplier_transaction_id = st.id AND st.deleted_at IS NULL
          AND v.supplier_id = s.id AND s.deleted_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM voucher_transactions vt
+           JOIN supplier_transactions st ON st.id = vt.supplier_transaction_id
+           WHERE vt.voucher_id = v.id AND st.deleted_at IS NOT NULL
+         )
        RETURNING v.id, v.voucher_number`,
       [voucherId]
     );
     if (!result.rows[0]) {
       const blocked = await client.query(
-        `SELECT v.id, st.deleted_at AS transaction_deleted_at,
-           s.deleted_at AS supplier_deleted_at
+        `SELECT v.id, s.deleted_at AS supplier_deleted_at,
+           EXISTS (
+             SELECT 1 FROM voucher_transactions vt
+             JOIN supplier_transactions st ON st.id = vt.supplier_transaction_id
+             WHERE vt.voucher_id = v.id AND st.deleted_at IS NOT NULL
+           ) AS has_deleted_transaction
          FROM vouchers v
-         JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
          JOIN suppliers s ON s.id = v.supplier_id
          WHERE v.id = $1 AND v.payment_status = 'Deleted'
            AND v.deleted_at IS NOT NULL AND v.restore_allowed = TRUE`,
         [voucherId]
       );
-      if (blocked.rows[0]?.supplier_deleted_at || blocked.rows[0]?.transaction_deleted_at) {
-        throw new HttpError(409, "Restore the linked supplier and transaction first. Its voucher will be restored automatically as Draft.");
+      if (blocked.rows[0]?.supplier_deleted_at || blocked.rows[0]?.has_deleted_transaction) {
+        throw new HttpError(409, "Restore the linked supplier and every linked transaction first. The voucher can then be restored as Draft.");
       }
       throw new HttpError(404, "Restorable deleted voucher not found.");
     }

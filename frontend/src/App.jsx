@@ -250,7 +250,9 @@ export default function App() {
         ...supplier,
         transactions: supplier.transactions.filter((item) => item.id !== transactionId)
       })));
-      setVouchers((current) => current.filter((item) => item.transactionId !== transactionId));
+      setVouchers((current) => current.filter((item) =>
+        !(item.transactionIds || [item.transactionId]).map(String).includes(String(transactionId))
+      ));
       addLocalAudit("PERMANENT_PURGE", {
         transactionId, reason: purgeDetails?.reason, status: "Unrestorable"
       }, "supplier_transaction", transactionId);

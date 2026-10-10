@@ -194,9 +194,9 @@ CREATE TABLE IF NOT EXISTS vouchers (
     payment_amount NUMERIC(14, 2) NOT NULL,
     withholding_tax_rate NUMERIC(5, 4) NOT NULL DEFAULT 0,
     withholding_tax_amount NUMERIC(14, 2)
-        GENERATED ALWAYS AS (ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+        GENERATED ALWAYS AS (ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)) STORED,
     net_cheque_amount NUMERIC(14, 2)
-        GENERATED ALWAYS AS (payment_amount - ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+        GENERATED ALWAYS AS (payment_amount - ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)) STORED,
     bank_name VARCHAR(120),
     payment_status VARCHAR(20) NOT NULL DEFAULT 'Draft'
         CHECK (payment_status IN ('Draft', 'Issued', 'Cancelled', 'Deleted')),
@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS vouchers (
         ON DELETE RESTRICT,
     CONSTRAINT vouchers_id_transaction_supplier_unique
         UNIQUE (id, supplier_transaction_id, supplier_id),
+    CONSTRAINT vouchers_id_supplier_unique
+        UNIQUE (id, supplier_id),
     CONSTRAINT vouchers_issued_fields_check
         CHECK (
             payment_status <> 'Issued'
@@ -245,6 +247,44 @@ CREATE INDEX IF NOT EXISTS vouchers_supplier_index
 
 CREATE INDEX IF NOT EXISTS vouchers_status_index
     ON vouchers (payment_status, voucher_date DESC);
+
+-- A voucher may settle several full-balance transactions belonging to one
+-- supplier. supplier_transaction_id on vouchers remains the first linked
+-- transaction so older installations and reports remain compatible.
+-- Existing databases were created before this composite uniqueness rule, so
+-- add it before creating the link table that references it.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'vouchers_id_supplier_unique'
+          AND conrelid = 'vouchers'::regclass
+    ) THEN
+        ALTER TABLE vouchers
+            ADD CONSTRAINT vouchers_id_supplier_unique UNIQUE (id, supplier_id);
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS voucher_transactions (
+    voucher_id BIGINT NOT NULL,
+    supplier_transaction_id BIGINT NOT NULL,
+    supplier_id BIGINT NOT NULL,
+    amount_applied NUMERIC(14, 2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (voucher_id, supplier_transaction_id),
+    CONSTRAINT voucher_transactions_positive_amount CHECK (amount_applied > 0),
+    CONSTRAINT voucher_transactions_voucher_supplier_fk
+        FOREIGN KEY (voucher_id, supplier_id)
+        REFERENCES vouchers (id, supplier_id)
+        ON DELETE CASCADE,
+    CONSTRAINT voucher_transactions_transaction_supplier_fk
+        FOREIGN KEY (supplier_transaction_id, supplier_id)
+        REFERENCES supplier_transactions (id, supplier_id)
+        ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS voucher_transactions_transaction_index
+    ON voucher_transactions (supplier_transaction_id, voucher_id);
 
 -- Keeps voucher numbers continuous even when multiple users create vouchers.
 -- The counter update and voucher insert happen in the same database transaction,
@@ -282,9 +322,9 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT payments_positive_amount
         CHECK (amount > 0),
-    CONSTRAINT payments_voucher_transaction_supplier_fk
-        FOREIGN KEY (voucher_id, supplier_transaction_id, supplier_id)
-        REFERENCES vouchers (id, supplier_transaction_id, supplier_id)
+    CONSTRAINT payments_voucher_fk
+        FOREIGN KEY (voucher_id)
+        REFERENCES vouchers (id)
         ON DELETE RESTRICT,
     CONSTRAINT payments_transaction_supplier_fk
         FOREIGN KEY (supplier_transaction_id, supplier_id)
@@ -527,9 +567,9 @@ ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255),
     ADD COLUMN IF NOT EXISTS withholding_tax_rate NUMERIC(5, 4) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS withholding_tax_amount NUMERIC(14, 2)
-        GENERATED ALWAYS AS (ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+        GENERATED ALWAYS AS (ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)) STORED,
     ADD COLUMN IF NOT EXISTS net_cheque_amount NUMERIC(14, 2)
-        GENERATED ALWAYS AS (payment_amount - ROUND(payment_amount * withholding_tax_rate, 2)) STORED,
+        GENERATED ALWAYS AS (payment_amount - ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)) STORED,
     ADD COLUMN IF NOT EXISTS bank_name VARCHAR(120),
     ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
@@ -538,6 +578,32 @@ ALTER TABLE vouchers
     ADD COLUMN IF NOT EXISTS deleted_with_transaction BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS permanently_deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS permanently_deleted_at TIMESTAMPTZ;
+
+-- Older installations calculated withholding tax from the VAT-inclusive
+-- amount. Replace only the generated values; voucher source records remain.
+DO $$
+DECLARE
+    tax_expression TEXT;
+BEGIN
+    SELECT generation_expression INTO tax_expression
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'vouchers'
+      AND column_name = 'withholding_tax_amount';
+
+    IF tax_expression IS NULL OR tax_expression NOT ILIKE '%/ 1.12%' THEN
+        ALTER TABLE vouchers DROP COLUMN IF EXISTS net_cheque_amount;
+        ALTER TABLE vouchers DROP COLUMN IF EXISTS withholding_tax_amount;
+        ALTER TABLE vouchers ADD COLUMN withholding_tax_amount NUMERIC(14, 2)
+            GENERATED ALWAYS AS (
+                ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)
+            ) STORED;
+        ALTER TABLE vouchers ADD COLUMN net_cheque_amount NUMERIC(14, 2)
+            GENERATED ALWAYS AS (
+                payment_amount - ROUND((payment_amount / 1.12) * withholding_tax_rate, 2)
+            ) STORED;
+    END IF;
+END $$;
 
 UPDATE vouchers
 SET payment_status = 'Deleted'
@@ -665,12 +731,71 @@ CREATE UNIQUE INDEX IF NOT EXISTS client_payments_one_current_transaction_unique
     WHERE deposit_status IN ('Pending Deposit', 'Deposited');
 
 -- Preserve reversed payment history while allowing a restored Draft voucher
--- to be issued again. Only one active payment may exist for a voucher.
-ALTER TABLE payments
-    DROP CONSTRAINT IF EXISTS payments_voucher_id_key;
+-- to be issued again. A multi-transaction voucher has one active payment per
+-- linked transaction, while a transaction can belong to only one active payment.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'vouchers_id_supplier_unique'
+          AND conrelid = 'vouchers'::regclass
+    ) THEN
+        ALTER TABLE vouchers
+            ADD CONSTRAINT vouchers_id_supplier_unique UNIQUE (id, supplier_id);
+    END IF;
+END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_voucher_unique
-    ON payments (voucher_id)
+CREATE TABLE IF NOT EXISTS voucher_transactions (
+    voucher_id BIGINT NOT NULL,
+    supplier_transaction_id BIGINT NOT NULL,
+    supplier_id BIGINT NOT NULL,
+    amount_applied NUMERIC(14, 2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (voucher_id, supplier_transaction_id),
+    CONSTRAINT voucher_transactions_positive_amount CHECK (amount_applied > 0),
+    CONSTRAINT voucher_transactions_voucher_supplier_fk
+        FOREIGN KEY (voucher_id, supplier_id)
+        REFERENCES vouchers (id, supplier_id) ON DELETE CASCADE,
+    CONSTRAINT voucher_transactions_transaction_supplier_fk
+        FOREIGN KEY (supplier_transaction_id, supplier_id)
+        REFERENCES supplier_transactions (id, supplier_id) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS voucher_transactions_transaction_index
+    ON voucher_transactions (supplier_transaction_id, voucher_id);
+
+INSERT INTO voucher_transactions (
+    voucher_id, supplier_transaction_id, supplier_id, amount_applied
+)
+SELECT id, supplier_transaction_id, supplier_id, payment_amount
+FROM vouchers
+ON CONFLICT (voucher_id, supplier_transaction_id) DO NOTHING;
+
+ALTER TABLE payments
+    DROP CONSTRAINT IF EXISTS payments_voucher_id_key,
+    DROP CONSTRAINT IF EXISTS payments_voucher_transaction_supplier_fk;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'payments_voucher_fk'
+          AND conrelid = 'payments'::regclass
+    ) THEN
+        ALTER TABLE payments
+            ADD CONSTRAINT payments_voucher_fk
+            FOREIGN KEY (voucher_id) REFERENCES vouchers (id) ON DELETE RESTRICT;
+    END IF;
+END $$;
+
+DROP INDEX IF EXISTS payments_one_active_voucher_unique;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_voucher_transaction_unique
+    ON payments (voucher_id, supplier_transaction_id)
+    WHERE reversed_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_supplier_transaction_unique
+    ON payments (supplier_transaction_id)
     WHERE reversed_at IS NULL;
 
 -- Repair vouchers that were left active by older builds after their supplier
@@ -679,7 +804,7 @@ WITH orphaned_payments AS (
     SELECT p.supplier_transaction_id, SUM(p.amount) AS amount_to_restore
     FROM payments p
     JOIN vouchers v ON v.id = p.voucher_id
-    JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+    JOIN supplier_transactions st ON st.id = p.supplier_transaction_id
     WHERE st.deleted_at IS NOT NULL
       AND v.deleted_at IS NULL
       AND p.reversed_at IS NULL
@@ -699,9 +824,9 @@ SET reversed_at = NOW(),
         p.reversal_reason,
         'Automatically reversed because the linked transaction was deleted'
     )
-FROM vouchers v
-JOIN supplier_transactions st ON st.id = v.supplier_transaction_id
+FROM vouchers v, supplier_transactions st
 WHERE p.voucher_id = v.id
+  AND st.id = p.supplier_transaction_id
   AND st.deleted_at IS NOT NULL
   AND v.deleted_at IS NULL
   AND p.reversed_at IS NULL;
@@ -716,9 +841,12 @@ SET payment_status = 'Deleted',
     restore_allowed = TRUE,
     deleted_with_transaction = TRUE,
     updated_at = NOW()
-FROM supplier_transactions st
-WHERE v.supplier_transaction_id = st.id
-  AND st.deleted_at IS NOT NULL
+WHERE EXISTS (
+    SELECT 1
+    FROM voucher_transactions vt
+    JOIN supplier_transactions st ON st.id = vt.supplier_transaction_id
+    WHERE vt.voucher_id = v.id AND st.deleted_at IS NOT NULL
+)
   AND v.deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS suppliers_deleted_at_index

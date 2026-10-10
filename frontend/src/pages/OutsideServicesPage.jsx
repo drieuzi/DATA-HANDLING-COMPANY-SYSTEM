@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import OutsideServiceEditorDialog from "../components/OutsideServiceEditorDialog.jsx";
@@ -46,6 +48,7 @@ export default function OutsideServicesPage({
     const matchesSearch = searchText.includes(query.trim().toLowerCase());
     return matchesMonth && matchesSearch;
   }), [query, selectedMonth, services]);
+  const pagination = useTablePagination(rows, [query, selectedMonth]);
 
   const total = rows.reduce((sum, service) => sum + Number(service.amount || 0), 0);
   const dateRange = selectedMonthRange(selectedMonth);
@@ -147,7 +150,7 @@ export default function OutsideServicesPage({
             <table className="financial-record-table outside-services-table">
               <thead><tr><th>Payee</th><th>Item</th><th>OR/S.I.</th><th>TIN</th><th>Amount</th><th>Date</th><th>Attachment</th><th>Actions</th></tr></thead>
               <tbody>
-                {rows.length ? rows.map((service) => (
+                {rows.length ? pagination.pageItems.map((service) => (
                   <tr key={service.id}>
                     <td>{service.payee || "—"}</td>
                     <td>{service.item}</td>
@@ -189,6 +192,7 @@ export default function OutsideServicesPage({
               <tfoot><tr><th colSpan="4">Filtered Total</th><td>{formatCurrency(total)}</td><td colSpan="3" /></tr></tfoot>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />
         </section>
 
       </main>

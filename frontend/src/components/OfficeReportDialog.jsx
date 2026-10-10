@@ -6,12 +6,15 @@ import {
   officeReportValue,
   printOfficeReport
 } from "../utils/officeReport.js";
+import TablePagination from "./TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 export default function OfficeReportDialog({ isOpen, title, columns, rows, generatedBy, onClose }) {
   const dialogRef = useRef(null);
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const totals = officeReportTotals(rows);
+  const pagination = useTablePagination(rows, [isOpen, title]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -62,13 +65,14 @@ export default function OfficeReportDialog({ isOpen, title, columns, rows, gener
         <div className="office-report-table-wrapper">
           <table>
             <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-            <tbody>{rows.map((row) => (
+            <tbody>{pagination.pageItems.map((row) => (
               <tr key={`${row.companyId}-${row.id}`}>
                 {columns.map((column) => <td key={column.key}>{officeReportValue(column, row)}</td>)}
               </tr>
             ))}</tbody>
           </table>
         </div>
+        <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />
         <div className="office-report-totals">
           <span>Total Amount: {officeReportCurrency.format(totals.amount)}</span>
           <span>Total Unpaid: {officeReportCurrency.format(totals.balance)}</span>

@@ -11,6 +11,7 @@ const REQUIRED_TABLES = [
   "suppliers",
   "supplier_transactions",
   "vouchers",
+  "voucher_transactions",
   "payments",
   "outside_services",
   "audit_logs",
@@ -46,7 +47,7 @@ async function verifyDatabase() {
   );
 
   const voucherAccountingResult = await pool.query(
-    `SELECT column_name
+    `SELECT column_name, generation_expression
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'vouchers'
        AND column_name IN ('withholding_tax_rate', 'withholding_tax_amount', 'net_cheque_amount', 'bank_name')`
@@ -71,7 +72,10 @@ async function verifyDatabase() {
      FROM pg_indexes
      WHERE schemaname = 'public'
        AND tablename = 'payments'
-       AND indexname = 'payments_one_active_voucher_unique'
+       AND indexname IN (
+         'payments_one_active_voucher_transaction_unique',
+         'payments_one_active_supplier_transaction_unique'
+       )
        AND indexdef ILIKE '%WHERE (reversed_at IS NULL)%'`
   );
 
@@ -176,14 +180,24 @@ async function verifyDatabase() {
   if (voucherAccountingResult.rows.length !== 4) {
     throw new Error("Voucher withholding-tax or bank fields are missing");
   }
+  const withholdingColumn = voucherAccountingResult.rows.find(
+    (row) => row.column_name === "withholding_tax_amount"
+  );
+  const netChequeColumn = voucherAccountingResult.rows.find(
+    (row) => row.column_name === "net_cheque_amount"
+  );
+  if (!withholdingColumn?.generation_expression?.includes("/ 1.12")
+    || !netChequeColumn?.generation_expression?.includes("/ 1.12")) {
+    throw new Error("Voucher withholding tax does not use the VAT-exclusive amount formula");
+  }
   if (voucherDeletionResult.rows.length !== 3) {
     throw new Error("Voucher historical or permanent-deletion fields are missing");
   }
   if (voucherCascadeResult.rows.length !== 1) {
     throw new Error("Voucher transaction-deletion tracking field is missing");
   }
-  if (activePaymentIndexResult.rows.length !== 1) {
-    throw new Error("Active voucher payment uniqueness rule is missing");
+  if (activePaymentIndexResult.rows.length !== 2) {
+    throw new Error("Multi-transaction voucher payment uniqueness rules are missing");
   }
   if (!voucherCounterResult.rows[0]) {
     throw new Error("Voucher number series is not initialized");
@@ -222,9 +236,10 @@ async function verifyDatabase() {
   console.log("Client collections: received cheques remain Pending Deposit until manually confirmed on or after the cheque date");
   console.log("Deletion policy: company and Other Expense deletions are recoverable; Admins can restore or permanently delete them");
   console.log("Supplier P.O. import: Excel attachment storage fields are available");
-  console.log("Voucher accounting fields: 1% withholding tax, net cheque amount, and bank name");
+  console.log("Voucher accounting fields: withholding tax uses (amount / 1.12) * 1%, with net cheque amount and bank name");
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
   console.log("Voucher lifecycle: linked vouchers follow supplier transaction deletion and restored vouchers can be reissued");
+  console.log("Multi-transaction vouchers: one supplier voucher can settle several full-balance transactions together");
   console.log("Other expenses: BIR details, amount, date, and optional PDF/image attachment are available");
   console.log("Account deletion: deactivation, Primary Admin approval, restoration, and permanent deletion are available");
   console.log(primaryAdminResult.rows[0]

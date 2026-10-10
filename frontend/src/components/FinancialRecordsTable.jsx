@@ -1,6 +1,8 @@
 import { useId, useMemo, useState } from "react";
 import TrackRecordHeader from "./TrackRecordHeader.jsx";
 import OfficeReportDialog from "./OfficeReportDialog.jsx";
+import TablePagination from "./TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 export default function FinancialRecordsTable({
   title, columns, rows, onBack, onEdit, onDelete,
@@ -35,6 +37,7 @@ export default function FinancialRecordsTable({
     const matchesTo = !toDate || (rowDate && rowDate <= toDate);
     return matchesStatus && matchesFrom && matchesTo && text.includes(query.trim().toLowerCase());
   }), [rows, query, status, searchKeys, dateField, fromDate, toDate]);
+  const pagination = useTablePagination(filteredRows, [query, status, fromDate, toDate]);
 
   const recordsCard = (
     <section className="financial-records-card" aria-label={title}>
@@ -60,9 +63,10 @@ export default function FinancialRecordsTable({
           </div>
           <div className="financial-table-wrapper">
             <table className="financial-record-table"><thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}{(onEdit || onDelete || renderActions) && <th>Actions</th>}</tr></thead>
-              <tbody>{filteredRows.length ? filteredRows.map((row) => <tr key={`${row.companyId}-${row.id}`}>{columns.map((column) => <td key={column.key}>{column.render ? column.render(row) : row[column.key]}</td>)}{(onEdit || onDelete || renderActions) && <td><div className="row-actions">{onEdit && <button className="table-action" type="button" disabled={!canEdit(row)} onClick={() => onEdit(row)}>{canEdit(row) ? "Edit" : "Locked"}</button>}{renderActions?.(row)}{onDelete && canDelete(row) && <button className="danger-action" type="button" onClick={() => onDelete(row)}>Delete</button>}</div></td>}</tr>) : <tr><td className="financial-records-empty" colSpan={columns.length + (onEdit || onDelete || renderActions ? 1 : 0)}>No records found.</td></tr>}</tbody>
+              <tbody>{filteredRows.length ? pagination.pageItems.map((row) => <tr key={`${row.companyId}-${row.id}`}>{columns.map((column) => <td key={column.key}>{column.render ? column.render(row) : row[column.key]}</td>)}{(onEdit || onDelete || renderActions) && <td><div className="row-actions">{onEdit && <button className="table-action" type="button" disabled={!canEdit(row)} onClick={() => onEdit(row)}>{canEdit(row) ? "Edit" : "Locked"}</button>}{renderActions?.(row)}{onDelete && canDelete(row) && <button className="danger-action" type="button" onClick={() => onDelete(row)}>Delete</button>}</div></td>}</tr>) : <tr><td className="financial-records-empty" colSpan={columns.length + (onEdit || onDelete || renderActions ? 1 : 0)}>No records found.</td></tr>}</tbody>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={filteredRows.length} onPageChange={pagination.setCurrentPage} />
     </section>
   );
 

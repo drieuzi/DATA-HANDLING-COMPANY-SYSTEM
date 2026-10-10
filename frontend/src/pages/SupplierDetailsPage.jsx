@@ -5,6 +5,8 @@ import TransactionEditorDialog from "../components/TransactionEditorDialog.jsx";
 import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onSaveSupplier, onDeleteSupplier, onRestoreSupplier }) {
   const [editorOpen, setEditorOpen] = useState(false);
@@ -35,6 +37,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
     ].filter(Boolean).join(" ").toLowerCase();
     return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
   }), [supplier.transactions, transactionSearch, transactionStatus]);
+  const pagination = useTablePagination(filteredTransactions, [transactionSearch, transactionStatus, supplier.id]);
 
   return (
     <div className="app-page supplier-page supplier-details-page">
@@ -120,7 +123,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.length ? filteredTransactions.map((transaction) => (
+                {filteredTransactions.length ? pagination.pageItems.map((transaction) => (
                   <tr className={transaction.deletedAt ? "is-deleted" : ""} key={transaction.id}>
                     <td>{transaction.voucherNumber || "—"}</td>
                     <td>{formatRecordDate(transaction.voucherDate)}</td>
@@ -148,6 +151,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
               </tbody>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={filteredTransactions.length} onPageChange={pagination.setCurrentPage} />
         </section>
       </main>
       <SupplierEditorDialog isOpen={companyEditorOpen} supplier={supplier} onSave={(values) => onSaveSupplier(supplier.id, values)} onClose={() => setCompanyEditorOpen(false)} />

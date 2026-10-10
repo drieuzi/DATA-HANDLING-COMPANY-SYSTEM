@@ -7,6 +7,8 @@ import ClientEditorDialog from "../components/ClientEditorDialog.jsx";
 import ClientDepositDialog from "../components/ClientDepositDialog.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination, { TABLE_PAGE_SIZE } from "../hooks/useTablePagination.js";
 
 export default function ClientDetailsPage({ client, user, focusTransactionId, onFocusHandled, onBack, onSaveTransaction, onDeleteTransaction, onRestoreTransaction, onReceivePayment, onConfirmDeposit, onRescheduleCheque, onSaveClient, onDeleteClient, onRestoreClient }) {
   const [editorOpen, setEditorOpen] = useState(false);
@@ -58,6 +60,13 @@ export default function ClientDetailsPage({ client, user, focusTransactionId, on
     ].filter(Boolean).join(" ").toLowerCase();
     return matchesStatus && searchableDetails.includes(transactionSearch.trim().toLowerCase());
   }), [client.transactions, transactionSearch, transactionStatus]);
+  const pagination = useTablePagination(filteredTransactions, [transactionSearch, transactionStatus, client.id]);
+
+  useEffect(() => {
+    if (!focusTransactionId) return;
+    const index = filteredTransactions.findIndex((transaction) => String(transaction.id) === String(focusTransactionId));
+    if (index >= 0) pagination.setCurrentPage(Math.floor(index / TABLE_PAGE_SIZE) + 1);
+  }, [focusTransactionId, filteredTransactions]);
 
   return (
     <div className="app-page client-details-page">
@@ -151,7 +160,7 @@ export default function ClientDetailsPage({ client, user, focusTransactionId, on
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.length ? filteredTransactions.map((transaction) => (
+                {filteredTransactions.length ? pagination.pageItems.map((transaction) => (
                   <tr
                     id={`client-transaction-${transaction.id}`}
                     className={`${transaction.deletedAt ? "is-deleted" : ""}${String(transaction.id) === highlightedTransactionId ? " is-notification-target" : ""}`}
@@ -188,6 +197,7 @@ export default function ClientDetailsPage({ client, user, focusTransactionId, on
               </tbody>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={filteredTransactions.length} onPageChange={pagination.setCurrentPage} />
         </section>
       </main>
       <ClientEditorDialog isOpen={companyEditorOpen} client={client} onSave={(values) => onSaveClient(client.id, values)} onClose={() => setCompanyEditorOpen(false)} />

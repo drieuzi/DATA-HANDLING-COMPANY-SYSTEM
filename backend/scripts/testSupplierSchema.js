@@ -65,6 +65,13 @@ async function runTest() {
     );
 
     await client.query(
+      `INSERT INTO voucher_transactions (
+         voucher_id, supplier_transaction_id, supplier_id, amount_applied
+       ) VALUES ($1, $2, $3, 10000.00)`,
+      [firstVoucher.rows[0].id, transactionId, supplierId]
+    );
+
+    await client.query(
       `INSERT INTO payments (
          voucher_id, supplier_transaction_id, supplier_id, amount,
          payment_date, recorded_by

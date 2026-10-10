@@ -69,9 +69,10 @@ async function loadSuppliers(includeDeleted = false) {
      FROM supplier_transactions st
      LEFT JOIN LATERAL (
        SELECT voucher_number, payment_status
-       FROM vouchers
-       WHERE supplier_transaction_id = st.id AND deleted_at IS NULL
-       ORDER BY created_at DESC, id DESC
+       FROM vouchers v
+       JOIN voucher_transactions vt ON vt.voucher_id = v.id
+       WHERE vt.supplier_transaction_id = st.id AND v.deleted_at IS NULL
+       ORDER BY v.created_at DESC, v.id DESC
        LIMIT 1
      ) latest_voucher ON TRUE
      WHERE st.deleted_at IS NULL OR ($1::BOOLEAN AND st.restore_allowed = TRUE)
@@ -442,7 +443,10 @@ async function deleteTransaction(request, response, next) {
 
     const linkedVouchers = await client.query(
       `SELECT * FROM vouchers
-       WHERE supplier_transaction_id = $1 AND deleted_at IS NULL
+       WHERE id IN (
+         SELECT voucher_id FROM voucher_transactions
+         WHERE supplier_transaction_id = $1
+       ) AND deleted_at IS NULL
        FOR UPDATE`,
       [transactionId]
     );
@@ -460,7 +464,10 @@ async function deleteTransaction(request, response, next) {
       `UPDATE vouchers SET payment_status = 'Deleted', deleted_at = NOW(),
          deleted_by = $1, deletion_reason = $2, restore_allowed = TRUE,
          deleted_with_transaction = TRUE, updated_at = NOW()
-       WHERE supplier_transaction_id = $3 AND deleted_at IS NULL
+       WHERE id IN (
+         SELECT voucher_id FROM voucher_transactions
+         WHERE supplier_transaction_id = $3
+       ) AND deleted_at IS NULL
        RETURNING id, voucher_number`,
       [request.user.id, `Deleted with supplier transaction: ${reason}`, transactionId]
     );
@@ -511,7 +518,15 @@ async function restoreTransaction(request, response, next) {
          deleted_by = NULL, deletion_reason = NULL, restore_allowed = TRUE,
          deleted_with_transaction = FALSE, issued_by = NULL, issued_at = NULL,
          cancelled_at = NULL, updated_at = NOW()
-       WHERE supplier_transaction_id = $1 AND deleted_with_transaction = TRUE
+       WHERE id IN (
+         SELECT vt.voucher_id FROM voucher_transactions vt
+         WHERE vt.supplier_transaction_id = $1
+           AND NOT EXISTS (
+             SELECT 1 FROM voucher_transactions other
+             JOIN supplier_transactions linked ON linked.id = other.supplier_transaction_id
+             WHERE other.voucher_id = vt.voucher_id AND linked.deleted_at IS NOT NULL
+           )
+       ) AND deleted_with_transaction = TRUE
          AND deleted_at IS NOT NULL AND restore_allowed = TRUE
        RETURNING id, voucher_number`,
       [transactionId]
@@ -561,14 +576,17 @@ async function permanentlyDeleteTransaction(request, response, next) {
 
     const vouchers = await client.query(
       `SELECT id, voucher_number, attachment_name
-       FROM vouchers WHERE supplier_transaction_id = $1 FOR UPDATE`,
-      [transactionId]
-    );
-    const payments = await client.query(
-      "SELECT id FROM payments WHERE supplier_transaction_id = $1 FOR UPDATE",
+       FROM vouchers WHERE id IN (
+         SELECT voucher_id FROM voucher_transactions
+         WHERE supplier_transaction_id = $1
+       ) FOR UPDATE`,
       [transactionId]
     );
     const voucherIds = vouchers.rows.map((row) => row.id);
+    const payments = await client.query(
+      "SELECT id FROM payments WHERE voucher_id = ANY($1::BIGINT[]) FOR UPDATE",
+      [voucherIds]
+    );
     const paymentIds = payments.rows.map((row) => row.id);
 
     await client.query(
@@ -578,8 +596,8 @@ async function permanentlyDeleteTransaction(request, response, next) {
           OR (entity_type = 'payment' AND entity_id = ANY($3::BIGINT[]))`,
       [transactionId, voucherIds, paymentIds]
     );
-    await client.query("DELETE FROM payments WHERE supplier_transaction_id = $1", [transactionId]);
-    await client.query("DELETE FROM vouchers WHERE supplier_transaction_id = $1", [transactionId]);
+    await client.query("DELETE FROM payments WHERE voucher_id = ANY($1::BIGINT[])", [voucherIds]);
+    await client.query("DELETE FROM vouchers WHERE id = ANY($1::BIGINT[])", [voucherIds]);
     await client.query("DELETE FROM supplier_transactions WHERE id = $1", [transactionId]);
 
     await writeAudit(client, request, "PERMANENT_PURGE", "supplier_transaction", transactionId, {

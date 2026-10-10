@@ -3,6 +3,8 @@ import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import SupplierEditorDialog from "../components/SupplierEditorDialog.jsx";
 import PayablesPage from "./PayablesPage.jsx";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 
 export default function SuppliersPage({
   suppliers,
@@ -30,6 +32,7 @@ export default function SuppliersPage({
       const status = supplier.deletedAt ? "deleted" : supplier.billingStatus?.toLowerCase();
       return status === statusFilter;
     });
+  const pagination = useTablePagination(visibleSuppliers, [companySearch, statusFilter, activeTab]);
 
 
   return (
@@ -109,7 +112,7 @@ export default function SuppliersPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleSuppliers.map((supplier) => (
+                    {pagination.pageItems.map((supplier) => (
                       <tr className={supplier.deletedAt ? "is-deleted" : ""} key={supplier.id}>
                         <td>
                           <button
@@ -138,6 +141,7 @@ export default function SuppliersPage({
                   </tbody>
                 </table>
               </div>
+              <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={visibleSuppliers.length} onPageChange={pagination.setCurrentPage} />
             </section>
           </div>
         )}

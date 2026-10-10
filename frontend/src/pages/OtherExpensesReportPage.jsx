@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { createFileReport, exportFileReportToPdf, reportTotal } from "../utils/reportExport.js";
 
@@ -18,6 +20,7 @@ export default function OtherExpensesReportPage({ user, rows, dateRange, onBack,
     suppliers: [],
     outsideServices: rows
   }), [template, rows]);
+  const pagination = useTablePagination(report.rows, [template, rows]);
 
   async function downloadReport() {
     if (!report.rows.length) return setMessage("There are no filtered records to export.");
@@ -80,12 +83,13 @@ export default function OtherExpensesReportPage({ user, rows, dateRange, onBack,
             <div className="financial-table-wrapper">
               <table className="financial-record-table report-preview-table outside-services-report-table">
                 <thead><tr>{report.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-                <tbody>{report.rows.length ? report.rows.map((row, index) => (
+                <tbody>{report.rows.length ? pagination.pageItems.map((row, index) => (
                   <tr key={`${template}-${index}`}>{report.columns.map((column) => <td key={column.key}>{column.type === "money" ? formatCurrency(row[column.key]) : row[column.key]}</td>)}</tr>
                 )) : <tr><td className="financial-records-empty" colSpan={report.columns.length}>No filtered records are available.</td></tr>}</tbody>
                 {report.rows.length > 0 && <tfoot><tr><th colSpan={report.columns.length - 1}>Total</th><th>{formatCurrency(reportTotal(report))}</th></tr></tfoot>}
               </table>
             </div>
+            <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={report.rows.length} onPageChange={pagination.setCurrentPage} />
           </div>
 
           <div className="report-export-actions">

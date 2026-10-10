@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
@@ -22,7 +24,7 @@ export default function TotalPurchasesPage({ suppliers, vouchers, onBack }) {
       .filter((transaction) => !transaction.deletedAt && (transaction.billingStatus === "Paid" || Number(transaction.balance) === 0))
       .map((transaction) => {
         const voucher = vouchers.find((item) => !item.deletedAt
-          && String(item.transactionId) === String(transaction.id)
+          && (item.transactionIds || [item.transactionId]).map(String).includes(String(transaction.id))
           && item.status === "Issued");
         const paymentDate = voucher?.paymentDate || transaction.paymentDate || "";
         return {
@@ -48,6 +50,7 @@ export default function TotalPurchasesPage({ suppliers, vouchers, onBack }) {
     const searchable = `${transaction.companyName} ${transaction.voucherNumber} ${transaction.purchaseOrder}`.toLowerCase();
     return matchesMonth && searchable.includes(query.trim().toLowerCase());
   }), [paidPurchases, query, selectedMonth]);
+  const pagination = useTablePagination(rows, [query, selectedMonth]);
 
   const monthlyGrossTotal = rows.reduce((sum, transaction) => sum + transaction.grossAmount, 0);
   const monthlyWithholdingTotal = rows.reduce((sum, transaction) => sum + transaction.withholdingTax, 0);
@@ -80,7 +83,7 @@ export default function TotalPurchasesPage({ suppliers, vouchers, onBack }) {
           <div className="financial-table-wrapper">
             <table className="financial-record-table purchase-record-table">
               <thead><tr><th>Supplier</th><th>Voucher #</th><th>P.O. #</th><th>Payment Date</th><th>Withholding Tax</th><th>Tax-Inclusive Purchase</th></tr></thead>
-              <tbody>{rows.length ? rows.map((transaction) => (
+              <tbody>{rows.length ? pagination.pageItems.map((transaction) => (
                 <tr key={`${transaction.companyId}-${transaction.id}`}>
                   <td>{transaction.companyName}</td>
                   <td>{transaction.voucherNumber}</td>
@@ -95,6 +98,7 @@ export default function TotalPurchasesPage({ suppliers, vouchers, onBack }) {
               </tfoot>
             </table>
           </div>
+          <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />
           <p className="purchase-total-note">The purchase total uses the full paid supplier amount. The 1% withholding tax is shown separately and is not deducted from the company’s total purchase cost.</p>
         </section>
       </main>

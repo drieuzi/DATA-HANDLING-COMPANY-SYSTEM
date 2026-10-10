@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import TablePagination from "../components/TablePagination.jsx";
+import useTablePagination from "../hooks/useTablePagination.js";
 import Header from "../components/Header.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import {
@@ -73,6 +75,7 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
       return matchesSearch && matchesStatus;
     });
   }, [users, search, statusFilter]);
+  const pagination = useTablePagination(filteredUsers, [search, statusFilter]);
 
   const accountCounts = useMemo(() => ({
     total: users.length,
@@ -302,7 +305,7 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
                 </thead>
                 <tbody>
                   {loading && <tr><td colSpan="5" className="account-empty">Loading accounts…</td></tr>}
-                  {!loading && filteredUsers.map((account) => (
+                  {!loading && pagination.pageItems.map((account) => (
                     <tr key={account.id}>
                       <td>
                         <strong>{account.fullName}</strong>
@@ -349,6 +352,7 @@ export default function AdminUsersPage({ currentUser, onBack, onLogout }) {
                 </tbody>
               </table>
             </div>
+            <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={filteredUsers.length} onPageChange={pagination.setCurrentPage} />
 
             {deletionRequests.length > 0 && (
               <section className="admin-deletion-requests" aria-labelledby="deletionRequestsTitle">

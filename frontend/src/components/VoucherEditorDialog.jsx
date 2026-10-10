@@ -15,16 +15,19 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
   const [saving, setSaving] = useState(false);
   const supplier = suppliers.find((item) => String(item.id) === String(fields.supplierId));
   const availableTransactions = useMemo(
-    () => supplier?.transactions.filter((item) => !item.deletedAt && (Number(item.balance) > 0 || String(item.id) === String(voucher?.transactionId))) || [],
+    () => supplier?.transactions.filter((item) => !item.deletedAt && (
+      Number(item.balance) > 0 || (voucher?.transactionIds || [voucher?.transactionId]).map(String).includes(String(item.id))
+    )) || [],
     [supplier, voucher]
   );
-  const transaction = availableTransactions.find((item) => String(item.id) === String(fields.transactionId));
-  const maximumPayment = voucher?.status === "Issued"
-    ? Number(transaction?.balance || 0) + Number(voucher.amountApplied || 0)
-    : Number(transaction?.balance || 0);
-  const grossAmount = Number(fields.amountApplied || 0);
+  const selectedTransactions = availableTransactions.filter((item) =>
+    (fields.transactionIds || []).map(String).includes(String(item.id))
+  );
+  const grossAmount = voucher
+    ? Number(voucher.amountApplied || 0)
+    : selectedTransactions.reduce((sum, item) => sum + Number(item.balance || 0), 0);
   const withholdingTaxAmount = fields.applyWithholdingTax
-    ? Math.round(grossAmount * 0.01 * 100) / 100
+    ? Math.round((grossAmount / 1.12) * 0.01 * 100) / 100
     : 0;
   const netChequeAmount = Math.max(grossAmount - withholdingTaxAmount, 0);
   const displayedVoucherNumber = String(fields.voucherNumber || voucherNumber || "").trim();
@@ -35,14 +38,14 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
       ...voucher,
       voucherNumber: voucher.voucherNumber || "",
       supplierId: String(voucher.supplierId || ""),
-      transactionId: String(voucher.transactionId || ""),
+      transactionIds: (voucher.transactionIds || [voucher.transactionId]).filter(Boolean).map(String),
       voucherDate: String(voucher.voucherDate || "").slice(0, 10),
       paymentDate: voucher.paymentDate === "—" ? "" : String(voucher.paymentDate || "").slice(0, 10),
       chequeDate: voucher.chequeDate === "—" ? "" : String(voucher.chequeDate || "").slice(0, 10),
       amountApplied: String(voucher.amountApplied || ""),
       applyWithholdingTax: Number(voucher.withholdingTaxRate || 0) === 0.01,
       bankName: voucher.bankName || ""
-    } : { voucherNumber, supplierId: "", transactionId: "", voucherDate: currentDate(), paymentDate: currentDate(), chequeNumber: "", chequeDate: currentDate(), particulars: "", amountApplied: "", applyWithholdingTax: false, bankName: "", status: "Draft" });
+    } : { voucherNumber, supplierId: "", transactionIds: [], voucherDate: currentDate(), paymentDate: currentDate(), chequeNumber: "", chequeDate: currentDate(), particulars: "", applyWithholdingTax: false, bankName: "", status: "Draft" });
     setMessage("");
   }, [isOpen, voucher, voucherNumber]);
 
@@ -56,13 +59,18 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
   function updateField(event) {
     const { name, value, type, checked } = event.target;
     setFields((current) => {
-      if (name === "supplierId") return { ...current, supplierId: value, transactionId: "", amountApplied: "" };
-      if (name === "transactionId") {
-        const selected = availableTransactions.find((item) => String(item.id) === String(value));
-        return { ...current, transactionId: value, amountApplied: selected ? String(selected.balance) : "" };
-      }
+      if (name === "supplierId") return { ...current, supplierId: value, transactionIds: [] };
       if (name === "bankName") return { ...current, bankName: value.toUpperCase() };
       return { ...current, [name]: type === "checkbox" ? checked : value };
+    });
+  }
+
+  function toggleTransaction(transactionId) {
+    setFields((current) => {
+      const selected = new Set((current.transactionIds || []).map(String));
+      if (selected.has(String(transactionId))) selected.delete(String(transactionId));
+      else selected.add(String(transactionId));
+      return { ...current, transactionIds: [...selected] };
     });
   }
 
@@ -90,23 +98,26 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
       }
       return;
     }
-    const amountApplied = Number(fields.amountApplied);
+    const amountApplied = grossAmount;
     if (!voucher && !displayedVoucherNumber) {
       setMessage("The next voucher number has not loaded. Close this form and try again.");
       return;
     }
-    if (!supplier || !transaction || !fields.chequeNumber.trim() || !fields.bankName?.trim() || amountApplied <= 0) {
-      setMessage("Supplier, transaction, cheque number, bank used, and a valid amount are required.");
-      return;
-    }
-    if (amountApplied !== maximumPayment) {
-      setMessage("Partial payments are not allowed. The voucher must cover the full payable balance.");
+    if (!supplier || !selectedTransactions.length || !fields.chequeNumber.trim() || !fields.bankName?.trim() || amountApplied <= 0) {
+      setMessage("Supplier, at least one transaction, cheque number, bank used, and a valid amount are required.");
       return;
     }
     setSaving(true);
     setMessage("");
     try {
-      await onSave({ ...fields, supplierName: supplier.name, purchaseOrder: transaction.purchaseOrder, salesInvoice: transaction.salesInvoice, chequeNumber: fields.chequeNumber.trim(), bankName: fields.bankName.trim(), amountApplied });
+      await onSave({
+        ...fields,
+        transactionIds: selectedTransactions.map((item) => String(item.id)),
+        supplierName: supplier.name,
+        chequeNumber: fields.chequeNumber.trim(),
+        bankName: fields.bankName.trim(),
+        amountApplied
+      });
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -129,17 +140,20 @@ export default function VoucherEditorDialog({ isOpen, voucherNumber = "", vouche
             {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </label>
-        <label>Payable transaction
-          <select name="transactionId" value={fields.transactionId || ""} onChange={updateField} disabled={!supplier || Boolean(voucher)} required>
-            <option value="">Select S.I. / P.O.</option>
-            {availableTransactions.map((item) => <option key={item.id} value={item.id}>S.I. {item.salesInvoice} / P.O. {item.purchaseOrder}</option>)}
-          </select>
-        </label>
+        <fieldset className="voucher-transaction-picker record-form__wide" disabled={!supplier || Boolean(voucher)}>
+          <legend>{voucher ? "Linked payable transactions" : "Payable transactions (select one or more)"}</legend>
+          {availableTransactions.length ? availableTransactions.map((item) => (
+            <label key={item.id} className="voucher-transaction-option">
+              <input type="checkbox" checked={(fields.transactionIds || []).map(String).includes(String(item.id))} onChange={() => toggleTransaction(item.id)} />
+              <span><strong>S.I. {item.salesInvoice} / P.O. {item.purchaseOrder}</strong><small>{formatVoucherAmount(voucher ? (voucher.transactions?.find((linked) => String(linked.id) === String(item.id))?.amountApplied || 0) : item.balance)}</small></span>
+            </label>
+          )) : <p className="voucher-transaction-empty">{supplier ? "No unpaid transactions are available." : "Select a supplier first."}</p>}
+        </fieldset>
         <label>Voucher Date<input type="date" name="voucherDate" value={fields.voucherDate || ""} onChange={updateField} required /></label>
         <label>Payment Date<input type="date" name="paymentDate" value={fields.paymentDate || ""} onChange={updateField} required /></label>
         <label>Cheque Number<input name="chequeNumber" value={fields.chequeNumber || ""} onChange={updateField} disabled={Boolean(voucher)} required /></label>
         <label>Cheque Date<input type="date" name="chequeDate" value={fields.chequeDate || ""} onChange={updateField} required /></label>
-        <label>Full Payment Amount<input value={formatVoucherAmount(fields.amountApplied)} readOnly aria-readonly="true" required /></label>
+        <label>Combined Full Payment Amount<input value={formatVoucherAmount(grossAmount)} readOnly aria-readonly="true" required /></label>
         <label className="voucher-tax-toggle record-form__wide">
           <input type="checkbox" name="applyWithholdingTax" checked={Boolean(fields.applyWithholdingTax)} onChange={updateField} disabled={Boolean(voucher)} />
           Apply 1% withholding tax
