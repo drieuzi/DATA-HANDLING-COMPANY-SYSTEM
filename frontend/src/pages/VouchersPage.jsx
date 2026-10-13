@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import TrackRecordHeader from "../components/TrackRecordHeader.jsx";
 import PageBackButton from "../components/PageBackButton.jsx";
 import VoucherEditorDialog from "../components/VoucherEditorDialog.jsx";
+import MonthlyVoucherReportPage from "./MonthlyVoucherReportPage.jsx";
 import { formatCurrency } from "../utils/dashboardCalculations.js";
 import { formatRecordDate } from "../utils/recordHelpers.js";
 import { downloadVoucherForPrint } from "../utils/voucherDocument.js";
@@ -15,7 +16,7 @@ function voucherStatus(voucher) {
 
 export default function VouchersPage({
   user, suppliers, vouchers, onBack, onCreate,
-  onEdit, onIssue, onDelete
+  onEdit, onIssue, onDelete, onRecordExport
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
@@ -24,6 +25,7 @@ export default function VouchersPage({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const [voucherDate, setVoucherDate] = useState("");
+  const [monthlyReportOpen, setMonthlyReportOpen] = useState(false);
   const isAdmin = user?.role === "admin";
   const searchSuggestions = useMemo(() => [...new Set(vouchers.flatMap((voucher) => [
     voucher.voucherNumber,
@@ -82,6 +84,17 @@ export default function VouchersPage({
     }
   }
 
+  if (monthlyReportOpen) {
+    return (
+      <MonthlyVoucherReportPage
+        user={user}
+        vouchers={vouchers}
+        onBack={() => setMonthlyReportOpen(false)}
+        onRecordExport={onRecordExport}
+      />
+    );
+  }
+
   return (
     <div className="app-page voucher-page">
       <TrackRecordHeader title="Voucher Cheque Records" />
@@ -95,9 +108,12 @@ export default function VouchersPage({
         <section className="voucher-card">
           <div className="management-heading">
             <div><p>Payment records</p><h2>Voucher Cheques</h2></div>
-            <button className="primary-action" type="button" onClick={openVoucherForm} disabled={loadingVoucherNumber}>
-              {loadingVoucherNumber ? "Loading voucher number…" : "+ Create Voucher"}
-            </button>
+            <div className="heading-actions">
+              <button className="secondary-action" type="button" onClick={() => setMonthlyReportOpen(true)}>Monthly Report</button>
+              <button className="primary-action" type="button" onClick={openVoucherForm} disabled={loadingVoucherNumber}>
+                {loadingVoucherNumber ? "Loading voucher number…" : "+ Create Voucher"}
+              </button>
+            </div>
           </div>
           <div className="records-toolbar records-toolbar--voucher-date">
             <label className="records-filter-field records-search-field">

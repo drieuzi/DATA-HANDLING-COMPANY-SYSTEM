@@ -683,7 +683,7 @@ export default function App() {
   } else if (currentPage === "clients") {
     page = <ClientsPage clients={clients} user={user} onBack={() => setCurrentPage("dashboard")} onSelectClient={(item) => { setSelectedClientId(item.id); setCurrentPage("client-details"); }} onSaveTransaction={saveClientTransaction} onDeleteTransaction={removeClientTransaction} onReceivePayment={receiveClientPayment} onConfirmDeposit={confirmClientDeposit} onRescheduleCheque={rescheduleClientCheque} onSaveClient={saveClient} onDeleteClient={removeClient} onRestoreClient={recoverClient} activeTab={clientSectionTab} onTabChange={setClientSectionTab} />;
   } else if (currentPage === "vouchers") {
-    page = <VouchersPage user={user} suppliers={suppliers.filter((item) => !item.deletedAt)} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} onCreate={createVoucher} onEdit={editVoucher} onIssue={issueVoucher} onDelete={removeVoucher} />;
+    page = <VouchersPage user={user} suppliers={suppliers.filter((item) => !item.deletedAt)} vouchers={vouchers} onBack={() => setCurrentPage("dashboard")} onCreate={createVoucher} onEdit={editVoucher} onIssue={issueVoucher} onDelete={removeVoucher} onRecordExport={recordExport} />;
   } else if (currentPage === "total-sales") {
     page = <TotalSalesPage clients={clients} onBack={() => setCurrentPage("dashboard")} />;
   } else if (currentPage === "total-purchases") {

@@ -3,7 +3,7 @@ const { writeAudit } = require("../services/auditservice");
 const HttpError = require("../utils/httpError");
 const validate = require("../utils/validation");
 
-const REPORT_TYPES = new Set(["sales", "purchases", "other_expenses"]);
+const REPORT_TYPES = new Set(["sales", "purchases", "other_expenses", "monthly_vouchers"]);
 const REPORT_FORMATS = new Set(["pdf"]);
 const REPORT_TEMPLATES = new Set(["bir", "office"]);
 const REPORT_STATUSES = new Set(["All", "Paid", "Not Paid"]);

@@ -257,3 +257,80 @@
   .detail-record-filters { grid-template-columns: 1fr; padding: 14px 16px; }
   .page-back-button { width: 100%; justify-content: center; }
 }
+
+.monthly-voucher-report-card {
+  border: 2px solid var(--black);
+}
+
+.monthly-voucher-report-heading {
+  align-items: center;
+  border-bottom: 2px solid var(--black);
+  background: var(--orange);
+}
+
+.monthly-voucher-report-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, .55fr) minmax(190px, .7fr);
+  gap: 14px;
+  padding: 18px 24px;
+  border-bottom: 2px solid var(--black);
+  background: var(--white);
+}
+
+.monthly-voucher-report-controls > div {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--yellow-light);
+}
+
+.monthly-voucher-report-controls span {
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.monthly-voucher-report-controls strong {
+  font-size: 1.05rem;
+}
+
+.monthly-voucher-report-controls select {
+  width: 100%;
+  padding: 11px 13px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+}
+
+.monthly-voucher-report-table {
+  min-width: 1320px;
+}
+
+.monthly-voucher-report-table tfoot th {
+  border-top: 2px solid var(--black);
+  background: var(--orange);
+  text-align: right;
+}
+
+.monthly-voucher-report-message {
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--white);
+  font-weight: 800;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .monthly-voucher-report-controls {
+    grid-template-columns: 1fr;
+    padding: 14px 18px;
+  }
+}
