@@ -9,7 +9,7 @@ import {
 import TablePagination from "./TablePagination.jsx";
 import useTablePagination from "../hooks/useTablePagination.js";
 
-export default function OfficeReportDialog({ isOpen, title, columns, rows, generatedBy, onClose }) {
+export default function OfficeReportDialog({ isOpen, title, columns, rows, generatedBy, showUnpaidTotal = true, onClose }) {
   const dialogRef = useRef(null);
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
@@ -28,8 +28,8 @@ export default function OfficeReportDialog({ isOpen, title, columns, rows, gener
     setWorking("pdf");
     setMessage("");
     try {
-      await downloadOfficeReportPdf({ title, columns, rows, generatedBy });
-      setMessage("Office Report PDF downloaded successfully.");
+      await downloadOfficeReportPdf({ title, columns, rows, generatedBy, showUnpaidTotal });
+      setMessage("Report PDF downloaded successfully.");
     } catch (error) {
       setMessage(error.message || "The PDF could not be created.");
     } finally {
@@ -40,7 +40,7 @@ export default function OfficeReportDialog({ isOpen, title, columns, rows, gener
   function printReport() {
     setMessage("");
     try {
-      printOfficeReport({ title, columns, rows, generatedBy });
+      printOfficeReport({ title, columns, rows, generatedBy, showUnpaidTotal });
     } catch (error) {
       setMessage(error.message || "The report could not be printed.");
     }
@@ -75,7 +75,7 @@ export default function OfficeReportDialog({ isOpen, title, columns, rows, gener
         <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />
         <div className="office-report-totals">
           <span>Total Amount: {officeReportCurrency.format(totals.amount)}</span>
-          <span>Total Unpaid: {officeReportCurrency.format(totals.balance)}</span>
+          {showUnpaidTotal && <span>Total Unpaid: {officeReportCurrency.format(totals.balance)}</span>}
         </div>
       </div>
       <div className="office-report-dialog__footer">

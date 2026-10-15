@@ -43,7 +43,7 @@ export default function OutsideServicesPage({
   const rows = useMemo(() => services.filter((service) => {
     if (service.deletedAt) return false;
     const matchesMonth = !selectedMonth || monthKey(service.date) === selectedMonth;
-    const searchText = [service.payee, service.item, service.receiptInvoiceNumber,
+    const searchText = [service.payee, service.receiptAddress, service.item, service.receiptInvoiceNumber, service.salesInvoiceDate,
       service.tinNumber].filter(Boolean).join(" ").toLowerCase();
     const matchesSearch = searchText.includes(query.trim().toLowerCase());
     return matchesMonth && matchesSearch;
@@ -133,7 +133,7 @@ export default function OutsideServicesPage({
           <div className="records-toolbar outside-services-toolbar">
             <label>
               <span>Search item</span>
-              <input type="search" placeholder="Search payee, item, receipt, or TIN" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input type="search" placeholder="Search payee, address, item, receipt, or TIN" value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <label>
               <span>Expense month</span>
@@ -148,13 +148,15 @@ export default function OutsideServicesPage({
 
           <div className="financial-table-wrapper">
             <table className="financial-record-table outside-services-table">
-              <thead><tr><th>Payee</th><th>Item</th><th>OR/S.I.</th><th>TIN</th><th>Amount</th><th>Date</th><th>Attachment</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Payee</th><th>Address</th><th>Item</th><th>OR/S.I.</th><th>S.I. Date</th><th>TIN</th><th>Amount</th><th>Date</th><th>Attachment</th><th>Actions</th></tr></thead>
               <tbody>
                 {rows.length ? pagination.pageItems.map((service) => (
                   <tr key={service.id}>
                     <td>{service.payee || "—"}</td>
+                    <td>{service.receiptAddress || "—"}</td>
                     <td>{service.item}</td>
                     <td>{service.receiptInvoiceNumber || "—"}</td>
+                    <td>{service.salesInvoiceDate ? formatRecordDate(service.salesInvoiceDate) : "Not recorded"}</td>
                     <td>{service.tinNumber || "—"}</td>
                     <td>{formatCurrency(service.amount)}</td>
                     <td>{formatRecordDate(service.date)}</td>
@@ -187,9 +189,9 @@ export default function OutsideServicesPage({
                       </div>
                     </td>
                   </tr>
-                )) : <tr><td className="financial-records-empty" colSpan="8">No other expense records found.</td></tr>}
+                )) : <tr><td className="financial-records-empty" colSpan="10">No other expense records found.</td></tr>}
               </tbody>
-              <tfoot><tr><th colSpan="4">Filtered Total</th><td>{formatCurrency(total)}</td><td colSpan="3" /></tr></tfoot>
+              <tfoot><tr><th colSpan="6">Filtered Total</th><td>{formatCurrency(total)}</td><td colSpan="3" /></tr></tfoot>
             </table>
           </div>
           <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalRecords={rows.length} onPageChange={pagination.setCurrentPage} />

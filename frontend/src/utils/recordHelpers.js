@@ -27,9 +27,5 @@ export function formatRecordDate(value) {
 
   if (Number.isNaN(date.getTime())) return "—";
 
-  return new Intl.DateTimeFormat("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric"
-  }).format(date);
+  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}/${date.getFullYear()}`;
 }

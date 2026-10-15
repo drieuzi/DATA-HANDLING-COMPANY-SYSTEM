@@ -28,6 +28,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
       supplier.name,
       transaction.voucherNumber,
       transaction.salesInvoice,
+      transaction.salesInvoiceDate,
       transaction.purchaseOrder,
       transaction.tinNumber,
       transaction.voucherDate,
@@ -114,6 +115,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                   <th>Voucher #</th>
                   <th>Voucher Date</th>
                   <th>S.I. #</th>
+                  <th>S.I. Date</th>
                   <th>P.O. #</th>
                   <th>TIN #</th>
                   <th>Amount</th>
@@ -128,6 +130,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                     <td>{transaction.voucherNumber || "—"}</td>
                     <td>{formatRecordDate(transaction.voucherDate)}</td>
                     <td>{transaction.salesInvoice}</td>
+                    <td>{transaction.salesInvoiceDate && transaction.salesInvoiceDate !== "—" ? formatRecordDate(transaction.salesInvoiceDate) : "Not recorded"}</td>
                     <td>{transaction.purchaseOrder}</td>
                     <td>{transaction.tinNumber || "—"}</td>
                     <td>{formatCurrency(transaction.amount)}</td>
@@ -147,7 +150,7 @@ export default function SupplierDetailsPage({ supplier, user, onBack, onSaveTran
                       {isAdmin && !supplier.deletedAt && transaction.deletedAt && transaction.restoreAllowed !== false && <button type="button" onClick={async () => { try { await onRestoreTransaction(transaction.id); } catch (error) { window.alert(error.message); } }}>Restore</button>}
                     </div></td>
                   </tr>
-                )) : <tr><td className="detail-records-empty" colSpan="9">No supplier transactions match these filters.</td></tr>}
+                )) : <tr><td className="detail-records-empty" colSpan="10">No supplier transactions match these filters.</td></tr>}
               </tbody>
             </table>
           </div>

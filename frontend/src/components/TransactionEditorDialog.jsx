@@ -9,6 +9,7 @@ function createInitialFields(type, transaction) {
       voucherDate: transaction.voucherDate === "—" ? "" : transaction.voucherDate || "",
       paymentDate: transaction.paymentDate === "—" ? "" : transaction.paymentDate || "",
       chequeDate: transaction.chequeDate === "—" ? "" : transaction.chequeDate || "",
+      salesInvoiceDate: transaction.salesInvoiceDate === "—" ? "" : transaction.salesInvoiceDate || "",
       tinNumber: transaction.tinNumber === "—" ? "" : transaction.tinNumber || ""
     };
   }
@@ -17,6 +18,7 @@ function createInitialFields(type, transaction) {
     ? {
         purchaseOrder: "",
         salesInvoice: "",
+        salesInvoiceDate: new Date().toISOString().slice(0, 10),
         tinNumber: "",
         amount: "",
         attachmentName: ""
@@ -129,8 +131,11 @@ export default function TransactionEditorDialog({
     const amount = Number(fields.amount);
     const balance = transaction?.balance ?? amount;
 
-    if (!fields.purchaseOrder.trim() || !fields.salesInvoice.trim() || !fields.tinNumber?.trim() || amount <= 0) {
-      setMessage("P.O. number, S.I. number, TIN number, and a valid amount are required.");
+    if (!fields.purchaseOrder.trim() || !fields.salesInvoice.trim() || (isSupplier && !fields.salesInvoiceDate)
+      || !fields.tinNumber?.trim() || amount <= 0) {
+      setMessage(isSupplier
+        ? "P.O. number, S.I. number, S.I. date, TIN number, and a valid amount are required."
+        : "P.O. number, S.I. number, TIN number, and a valid amount are required.");
       return;
     }
 
@@ -176,6 +181,11 @@ export default function TransactionEditorDialog({
             S.I. Number
             <input name="salesInvoice" value={fields.salesInvoice} onChange={updateField} required />
           </label>
+
+          {isSupplier && <label>
+            S.I. Date (MM/DD/YYYY)
+            <input type="date" name="salesInvoiceDate" value={fields.salesInvoiceDate || ""} onChange={updateField} required />
+          </label>}
 
           {!isSupplier && (
             <label>

@@ -11,13 +11,15 @@ export default function FinancialRecordsTable({
   searchKeys = [],
   dateField = "",
   officeReportTitle,
+  birReportTitle,
+  birReportColumns,
   generatedBy
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [reportOpen, setReportOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState("");
   const suggestionListId = `record-suggestions-${useId().replaceAll(":", "")}`;
   const sectionTitle = title.replace(/ Track Records$/i, "");
   const suggestions = useMemo(() => [...new Set(rows.flatMap((row) =>
@@ -45,7 +47,8 @@ export default function FinancialRecordsTable({
             <div><p>Company records</p><h2>{sectionTitle} Transactions</h2></div>
             <div className="financial-records-heading__actions">
               <span>{filteredRows.length} record(s)</span>
-              {officeReportTitle && <button className="secondary-action" type="button" disabled={!filteredRows.length} onClick={() => setReportOpen(true)}>Preview Office Report</button>}
+              {birReportTitle && <button className="secondary-action" type="button" disabled={!filteredRows.length} onClick={() => setReportOpen("bir")}>Preview BIR Report</button>}
+              {officeReportTitle && <button className="secondary-action" type="button" disabled={!filteredRows.length} onClick={() => setReportOpen("office")}>Preview Office Report</button>}
             </div>
           </div>
           <div className={`records-toolbar${dateField ? " records-toolbar--date-range" : ""}`}>
@@ -70,14 +73,15 @@ export default function FinancialRecordsTable({
     </section>
   );
 
-  const reportDialog = officeReportTitle ? (
+  const reportDialog = (officeReportTitle || birReportTitle) ? (
     <OfficeReportDialog
-      isOpen={reportOpen}
-      title={officeReportTitle}
-      columns={columns}
+      isOpen={Boolean(reportOpen)}
+      title={reportOpen === "bir" ? birReportTitle : officeReportTitle}
+      columns={reportOpen === "bir" ? (birReportColumns || columns) : columns}
       rows={filteredRows}
       generatedBy={generatedBy}
-      onClose={() => setReportOpen(false)}
+      showUnpaidTotal={reportOpen !== "bir"}
+      onClose={() => setReportOpen("")}
     />
   ) : null;
 

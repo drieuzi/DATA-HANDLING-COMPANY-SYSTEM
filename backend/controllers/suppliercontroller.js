@@ -11,6 +11,7 @@ function mapTransaction(row) {
     voucherDate: row.voucher_date || "—",
     paymentDate: row.payment_date || "—",
     salesInvoice: row.sales_invoice_number || "—",
+    salesInvoiceDate: row.sales_invoice_date || "—",
     purchaseOrder: row.purchase_order_number || "—",
     tinNumber: row.tin_number || "—",
     chequeDate: row.cheque_date || "—",
@@ -353,6 +354,7 @@ function transactionValues(body) {
     voucherDate: validate.date(body.voucherDate, "Voucher date"),
     paymentDate: validate.date(body.paymentDate, "Payment date"),
     salesInvoice: validate.text(body.salesInvoice, "Sales invoice number", { max: 80 }),
+    salesInvoiceDate: validate.date(body.salesInvoiceDate, "Sales invoice date", { required: true }),
     purchaseOrder: validate.text(body.purchaseOrder, "Purchase order number", { max: 80 }),
     chequeDate: validate.date(body.chequeDate, "Cheque date"),
     amount: validate.money(body.amount, "Amount"),
@@ -377,9 +379,9 @@ async function createTransaction(request, response, next) {
     if (!supplier.rows[0]) throw new HttpError(404, "Active supplier not found.");
     const result = await client.query(
       `INSERT INTO supplier_transactions (
-         supplier_id, voucher_date, payment_date, sales_invoice_number,
+         supplier_id, voucher_date, payment_date, sales_invoice_number, sales_invoice_date,
          purchase_order_number, cheque_date, amount, tin_number, balance, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $9)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $8, $10)
        RETURNING *`,
       [supplierId, ...Object.values(values), request.user.id]
     );
@@ -410,10 +412,10 @@ async function updateTransaction(request, response, next) {
     const result = await client.query(
       `UPDATE supplier_transactions SET
          voucher_date = $1, payment_date = $2, sales_invoice_number = $3,
-         purchase_order_number = $4, cheque_date = $5,
-         amount = $6, tin_number = $7,
-         balance = $6::NUMERIC - $8::NUMERIC
-       WHERE id = $9 AND deleted_at IS NULL
+         sales_invoice_date = $4, purchase_order_number = $5, cheque_date = $6,
+         amount = $7, tin_number = $8,
+         balance = $7::NUMERIC - $9::NUMERIC
+       WHERE id = $10 AND deleted_at IS NULL
        RETURNING *`,
       [...Object.values(values), paidAmount, transactionId]
     );

@@ -12,8 +12,10 @@ function mapOutsideService(row) {
   return {
     id: String(row.id),
     payee: row.payee || "",
+    receiptAddress: row.receipt_address || "",
     item: row.item,
     receiptInvoiceNumber: row.receipt_invoice_number || "",
+    salesInvoiceDate: row.sales_invoice_date || null,
     tinNumber: row.tin_number || "",
     amount: Number(row.amount),
     date: row.service_date,
@@ -35,8 +37,10 @@ function mapOutsideService(row) {
 function serviceValues(body) {
   return {
     payee: validate.text(body.payee, "Payee", { required: true, max: 160 }),
+    receiptAddress: validate.text(body.receiptAddress, "Receipt address", { required: true, max: 1000 }),
     item: validate.text(body.item, "Item", { required: true, max: 200 }),
     receiptInvoiceNumber: validate.text(body.receiptInvoiceNumber, "OR/S.I. number", { required: true, max: 80 }),
+    salesInvoiceDate: validate.date(body.salesInvoiceDate, "S.I. date", { required: true }),
     tinNumber: validate.text(body.tinNumber, "TIN number", { required: true, max: 40 }),
     amount: validate.money(body.amount, "Amount"),
     date: validate.date(body.date, "Date", { required: true })
@@ -63,12 +67,12 @@ async function createOutsideService(request, response, next) {
     await client.query("BEGIN");
     const result = await client.query(
       `INSERT INTO outside_services (
-         payee, item, receipt_invoice_number, tin_number,
+         payee, receipt_address, item, receipt_invoice_number, sales_invoice_date, tin_number,
          amount, service_date, attachment_path, attachment_original_name,
          attachment_mime_type, attachment_size, created_by, updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11) RETURNING *`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13) RETURNING *`,
       [
-        values.payee, values.item, values.receiptInvoiceNumber, values.tinNumber,
+        values.payee, values.receiptAddress, values.item, values.receiptInvoiceNumber, values.salesInvoiceDate, values.tinNumber,
         values.amount, values.date, storedRelativePath(request.file),
         request.file?.originalname || null, request.file?.mimetype || null,
         request.file?.size || null, request.user.id
@@ -102,17 +106,17 @@ async function updateOutsideService(request, response, next) {
     previousAttachmentPath = existing.rows[0].attachment_path;
     const result = await client.query(
       `UPDATE outside_services
-       SET payee = $1, item = $2,
-           receipt_invoice_number = $3, tin_number = $4,
-           amount = $5, service_date = $6,
-           attachment_path = CASE WHEN $7::boolean THEN $8 ELSE attachment_path END,
-           attachment_original_name = CASE WHEN $7::boolean THEN $9 ELSE attachment_original_name END,
-           attachment_mime_type = CASE WHEN $7::boolean THEN $10 ELSE attachment_mime_type END,
-           attachment_size = CASE WHEN $7::boolean THEN $11 ELSE attachment_size END,
-           updated_by = $12
-       WHERE id = $13 AND deleted_at IS NULL RETURNING *`,
+       SET payee = $1, receipt_address = $2, item = $3,
+           receipt_invoice_number = $4, sales_invoice_date = $5, tin_number = $6,
+           amount = $7, service_date = $8,
+           attachment_path = CASE WHEN $9::boolean THEN $10 ELSE attachment_path END,
+           attachment_original_name = CASE WHEN $9::boolean THEN $11 ELSE attachment_original_name END,
+           attachment_mime_type = CASE WHEN $9::boolean THEN $12 ELSE attachment_mime_type END,
+           attachment_size = CASE WHEN $9::boolean THEN $13 ELSE attachment_size END,
+           updated_by = $14
+       WHERE id = $15 AND deleted_at IS NULL RETURNING *`,
       [
-        values.payee, values.item, values.receiptInvoiceNumber, values.tinNumber,
+        values.payee, values.receiptAddress, values.item, values.receiptInvoiceNumber, values.salesInvoiceDate, values.tinNumber,
         values.amount, values.date, Boolean(request.file),
         storedRelativePath(request.file), request.file?.originalname || null,
         request.file?.mimetype || null, request.file?.size || null,

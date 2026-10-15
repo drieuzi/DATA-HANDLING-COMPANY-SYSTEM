@@ -22,8 +22,8 @@ function normalizeDate(value) {
 function displayDate(value) {
   const normalized = normalizeDate(value);
   if (!normalized) return "-";
-  return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "short", day: "numeric" })
-    .format(new Date(`${normalized}T00:00:00`));
+  const [year, month, day] = normalized.split("-");
+  return `${month}/${day}/${year}`;
 }
 
 function withinRange(value, from, to) {
@@ -46,9 +46,11 @@ export function createFileReport({ source, template, status, from, to, clients, 
   if (source === "other_expenses") {
     const columns = [
       column("Date", "date", 14),
-      column("Particulars", "particulars", 32),
+      column("Particulars", "particulars", 26),
+      column("Address", "address", 28),
       column("Amount", "amount", 18, "money"),
       column("OR/S.I.", "salesInvoice", 18),
+      column("S.I. Date", "salesInvoiceDate", 16),
       column("TIN No.", "tinNumber", 18)
     ];
     if (template === "office") columns.push(column("Attachment", "attachment", 22));
@@ -61,8 +63,10 @@ export function createFileReport({ source, template, status, from, to, clients, 
         .map((expense) => ({
           date: displayDate(expense.date),
           particulars: [expense.payee, expense.item].filter(Boolean).join(" — ") || "-",
+          address: expense.receiptAddress || "-",
           amount: Number(expense.amount || 0),
           salesInvoice: expense.receiptInvoiceNumber || "-",
+          salesInvoiceDate: expense.salesInvoiceDate ? displayDate(expense.salesInvoiceDate) : "Not recorded",
           tinNumber: expense.tinNumber || "-",
           attachment: expense.attachmentName || "-"
         })),
@@ -82,6 +86,7 @@ export function createFileReport({ source, template, status, from, to, clients, 
         address: company.businessAddress || "-",
         amount: Number(transaction.amount || 0),
         salesInvoice: transaction.salesInvoice || "-",
+        salesInvoiceDate: transaction.salesInvoiceDate ? displayDate(transaction.salesInvoiceDate) : "Not recorded",
         tinNumber: transaction.tinNumber || "-",
         billingStatus: transaction.billingStatus || (Number(transaction.balance) === 0 ? "Paid" : "Not Paid"),
         purchaseOrder: transaction.purchaseOrder || "-"
@@ -90,8 +95,10 @@ export function createFileReport({ source, template, status, from, to, clients, 
   const columns = [
     column("Date", "date", 14), column("Particulars", "particulars", 24),
     column("Address", "address", 30), column("Amount", "amount", 16, "money"),
-    column("OR/S.I.", "salesInvoice", 16), column("TIN No.", "tinNumber", 18)
+    column("OR/S.I.", "salesInvoice", 16)
   ];
+  if (source === "purchases") columns.push(column("S.I. Date", "salesInvoiceDate", 16));
+  columns.push(column("TIN No.", "tinNumber", 18));
   if (template === "office") {
     columns.push(column("Billing Status", "billingStatus", 16), column("P.O. Number", "purchaseOrder", 18));
   }

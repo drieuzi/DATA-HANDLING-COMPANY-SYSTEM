@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyService = () => ({
-  payee: "", item: "", receiptInvoiceNumber: "",
-  tinNumber: "", amount: "", date: today()
+  payee: "", receiptAddress: "", item: "", receiptInvoiceNumber: "",
+  tinNumber: "", salesInvoiceDate: today(), amount: "", date: today()
 });
 const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
 
@@ -17,8 +17,9 @@ export default function OutsideServiceEditorDialog({ isOpen, service, onSave, on
   useEffect(() => {
     setFields(service
       ? {
-          payee: service.payee || "", item: service.item || "",
+          payee: service.payee || "", receiptAddress: service.receiptAddress || "", item: service.item || "",
           receiptInvoiceNumber: service.receiptInvoiceNumber || "",
+          salesInvoiceDate: service.salesInvoiceDate ? String(service.salesInvoiceDate).slice(0, 10) : "",
           tinNumber: service.tinNumber || "", amount: String(service.amount || ""),
           date: service.date || today()
         }
@@ -55,8 +56,10 @@ export default function OutsideServiceEditorDialog({ isOpen, service, onSave, on
   async function submit(event) {
     event.preventDefault();
     if (!fields.payee.trim()) return setMessage("Enter the payee or company name.");
+    if (!fields.receiptAddress.trim()) return setMessage("Enter the address shown on the receipt.");
     if (!fields.item.trim()) return setMessage("Enter the other expense item.");
     if (!fields.receiptInvoiceNumber.trim()) return setMessage("Enter the OR/S.I. number.");
+    if (!fields.salesInvoiceDate) return setMessage("Enter the S.I. date.");
     if (!fields.tinNumber.trim()) return setMessage("Enter the TIN number.");
     if (!fields.date) return setMessage("Select the expense date.");
     if (!Number.isFinite(Number(fields.amount)) || Number(fields.amount) <= 0) {
@@ -67,8 +70,10 @@ export default function OutsideServiceEditorDialog({ isOpen, service, onSave, on
     try {
       await onSave({
         payee: fields.payee.trim(),
+        receiptAddress: fields.receiptAddress.trim(),
         item: fields.item.trim(),
         receiptInvoiceNumber: fields.receiptInvoiceNumber.trim(),
+        salesInvoiceDate: fields.salesInvoiceDate,
         tinNumber: fields.tinNumber.trim(),
         amount: Number(fields.amount).toFixed(2),
         date: fields.date,
@@ -94,12 +99,20 @@ export default function OutsideServiceEditorDialog({ isOpen, service, onSave, on
           <input name="payee" value={fields.payee} onChange={change} maxLength="160" required />
         </label>
         <label className="record-form__wide">
+          Address from Receipt
+          <textarea name="receiptAddress" value={fields.receiptAddress} onChange={change} maxLength="1000" rows="2" required />
+        </label>
+        <label className="record-form__wide">
           Item
           <input name="item" value={fields.item} onChange={change} maxLength="200" required />
         </label>
         <label>
           OR/S.I. Number
           <input name="receiptInvoiceNumber" value={fields.receiptInvoiceNumber} onChange={change} maxLength="80" required />
+        </label>
+        <label>
+          S.I. Date (MM/DD/YYYY)
+          <input name="salesInvoiceDate" type="date" value={fields.salesInvoiceDate || ""} onChange={change} required />
         </label>
         <label>
           TIN Number

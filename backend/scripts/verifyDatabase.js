@@ -145,10 +145,16 @@ async function verifyDatabase() {
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'outside_services'
        AND column_name IN (
-         'payee', 'receipt_invoice_number', 'tin_number',
+         'payee', 'receipt_address', 'receipt_invoice_number', 'sales_invoice_date', 'tin_number',
          'attachment_path', 'attachment_original_name',
          'attachment_mime_type', 'attachment_size'
        )`
+  );
+
+  const supplierSalesInvoiceDateResult = await pool.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'supplier_transactions'
+       AND column_name = 'sales_invoice_date'`
   );
 
   const accountProtectionResult = await pool.query(
@@ -220,8 +226,11 @@ async function verifyDatabase() {
   if (supplierAttachmentResult.rows.length !== 3) {
     throw new Error("Supplier transaction Excel attachment fields are missing");
   }
-  if (outsideServiceAttachmentResult.rows.length !== 7) {
+  if (outsideServiceAttachmentResult.rows.length !== 9) {
     throw new Error("Other expense BIR or attachment fields are missing");
+  }
+  if (supplierSalesInvoiceDateResult.rows.length !== 1) {
+    throw new Error("Supplier transaction S.I. date field is missing");
   }
   if (accountProtectionResult.rows.length !== 5) {
     throw new Error("Protected account deletion fields are missing");
@@ -240,7 +249,8 @@ async function verifyDatabase() {
   console.log("Voucher deletion: historical Deleted status plus Admin-only irreversible removal");
   console.log("Voucher lifecycle: linked vouchers follow supplier transaction deletion and restored vouchers can be reissued");
   console.log("Multi-transaction vouchers: one supplier voucher can settle several full-balance transactions together");
-  console.log("Other expenses: BIR details, amount, date, and optional PDF/image attachment are available");
+  console.log("S.I. dates: supplier transactions and Other Expenses require dates for new records and preserve legacy blanks");
+  console.log("Other expenses: receipt address, BIR details, amount, date, and optional PDF/image attachment are available");
   console.log("Account deletion: deactivation, Primary Admin approval, restoration, and permanent deletion are available");
   console.log(primaryAdminResult.rows[0]
     ? `Primary Admin: ${primaryAdminResult.rows[0].username} (${primaryAdminResult.rows[0].full_name})`

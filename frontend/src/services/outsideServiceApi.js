@@ -3,8 +3,10 @@ import { apiRequest, downloadApiFile, viewApiFile } from "./apiClient.js";
 function serviceFormData(values) {
   const formData = new FormData();
   formData.append("payee", values.payee);
+  formData.append("receiptAddress", values.receiptAddress);
   formData.append("item", values.item);
   formData.append("receiptInvoiceNumber", values.receiptInvoiceNumber);
+  formData.append("salesInvoiceDate", values.salesInvoiceDate);
   formData.append("tinNumber", values.tinNumber);
   formData.append("amount", values.amount);
   formData.append("date", values.date);

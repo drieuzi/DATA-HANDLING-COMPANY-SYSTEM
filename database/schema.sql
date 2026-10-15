@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS supplier_transactions (
     voucher_date DATE,
     payment_date DATE,
     sales_invoice_number VARCHAR(80) NOT NULL,
+    sales_invoice_date DATE,
     purchase_order_number VARCHAR(80) NOT NULL,
     tin_number VARCHAR(40) NOT NULL,
     cheque_date DATE,
@@ -179,6 +180,9 @@ CREATE INDEX IF NOT EXISTS supplier_transactions_purchase_order_index
 CREATE INDEX IF NOT EXISTS supplier_transactions_sales_invoice_index
     ON supplier_transactions (sales_invoice_number)
     WHERE sales_invoice_number IS NOT NULL;
+
+ALTER TABLE supplier_transactions
+    ADD COLUMN IF NOT EXISTS sales_invoice_date DATE;
 
 CREATE TABLE IF NOT EXISTS vouchers (
     id BIGSERIAL PRIMARY KEY,
@@ -466,8 +470,10 @@ CREATE INDEX IF NOT EXISTS client_payments_client_index
 CREATE TABLE IF NOT EXISTS outside_services (
     id BIGSERIAL PRIMARY KEY,
     payee VARCHAR(160) NOT NULL,
+    receipt_address TEXT NOT NULL,
     item VARCHAR(200) NOT NULL,
     receipt_invoice_number VARCHAR(80) NOT NULL,
+    sales_invoice_date DATE,
     tin_number VARCHAR(40) NOT NULL,
     amount NUMERIC(14, 2) NOT NULL,
     service_date DATE NOT NULL,
@@ -492,6 +498,8 @@ CREATE TABLE IF NOT EXISTS outside_services (
 
 ALTER TABLE outside_services
     ADD COLUMN IF NOT EXISTS payee VARCHAR(160),
+    ADD COLUMN IF NOT EXISTS receipt_address TEXT,
+    ADD COLUMN IF NOT EXISTS sales_invoice_date DATE,
     ADD COLUMN IF NOT EXISTS receipt_invoice_number VARCHAR(80),
     ADD COLUMN IF NOT EXISTS tin_number VARCHAR(40),
     ADD COLUMN IF NOT EXISTS attachment_path VARCHAR(500),
@@ -503,8 +511,14 @@ ALTER TABLE outside_services
     ADD COLUMN IF NOT EXISTS deletion_reason TEXT,
     ADD COLUMN IF NOT EXISTS restore_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
--- Existing expense records and attachments remain intact. Only the address
--- field, which is no longer part of Other Expenses, is removed.
+UPDATE outside_services
+SET receipt_address = COALESCE(NULLIF(BTRIM(receipt_address), ''), 'Address not recorded');
+
+ALTER TABLE outside_services
+    ALTER COLUMN receipt_address SET NOT NULL;
+
+-- The old business-address field is replaced by the receipt-specific address.
+-- Existing expense records and attachments remain intact.
 ALTER TABLE outside_services
     DROP COLUMN IF EXISTS business_address;
 
@@ -892,6 +906,7 @@ SELECT
     st.voucher_date,
     st.payment_date,
     st.sales_invoice_number,
+    st.sales_invoice_date,
     st.purchase_order_number,
     st.tin_number,
     st.cheque_date,
