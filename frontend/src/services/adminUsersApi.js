@@ -1,6 +1,6 @@
 import { USE_DEMO_DATA } from "./authApi.js";
+import { apiRequest } from "./apiClient.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const DEMO_KEY = "illuminux-demo-users";
 
 const demoAdmin = {
@@ -28,14 +28,7 @@ function saveDemoUsers(users) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.message || "The account request failed.");
-  return result;
+  return apiRequest(path, options);
 }
 
 export async function listUsers() {

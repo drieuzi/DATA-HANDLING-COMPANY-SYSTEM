@@ -14,7 +14,8 @@
     "db:test-client": "npm --prefix backend run db:test-client",
     "set-primary-admin": "npm --prefix backend run set-primary-admin --",
     "create-admin": "npm --prefix backend run create-admin --",
-    "build": "npm --prefix frontend run build",
+    "build": "npm --prefix frontend install --include=dev && npm --prefix frontend run build",
+    "start": "node backend/server.js",
     "preview": "npm --prefix frontend run preview"
   },
   "devDependencies": {

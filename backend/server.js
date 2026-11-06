@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
@@ -26,9 +27,29 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
 
 if (isProduction) app.set("trust proxy", 1);
 
-app.use(helmet());
+const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.replace(/\/+$/, "");
+    if (
+      allowedOrigins.includes(cleanOrigin) ||
+      allowedOrigins.includes("*") ||
+      (cleanOrigin.endsWith(".vercel.app") && allowedOrigins.some((ao) => ao.includes("vercel.app"))) ||
+      (!isProduction && cleanOrigin.startsWith("http://localhost"))
+    ) {
+      return callback(null, true);
+    }
+    callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: "1mb" }));
@@ -54,10 +75,18 @@ app.use("/api/audit-logs", auditRoutes);
 app.use("/api/outside-services", outsideServiceRoutes);
 app.use("/api", notFoundHandler);
 
-if (isProduction) {
-  const frontendDist = path.join(__dirname, "../frontend/dist");
+const frontendDist = path.join(__dirname, "../frontend/dist");
+if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.use((_request, response) => response.sendFile(path.join(frontendDist, "index.html")));
+} else {
+  app.get("/", (_request, response) => {
+    response.json({
+      name: "Illuminux Management System API",
+      status: "online",
+      health: "/api/health"
+    });
+  });
 }
 
 app.use(errorHandler);

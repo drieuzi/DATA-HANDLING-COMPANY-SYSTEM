@@ -5,7 +5,28 @@ const path = require("path");
 const pool = require("../config/db");
 
 async function initialize() {
-  const schemaPath = path.join(__dirname, "../../database/schema.sql");
+  const candidatePaths = [
+    path.join(__dirname, "../database/schema.sql"),
+    path.join(__dirname, "../../database/schema.sql"),
+    path.join(process.cwd(), "database/schema.sql"),
+    path.join(process.cwd(), "backend/database/schema.sql")
+  ];
+
+  let schemaPath = null;
+  for (const candidate of candidatePaths) {
+    try {
+      await fs.access(candidate);
+      schemaPath = candidate;
+      break;
+    } catch {
+      // try next
+    }
+  }
+
+  if (!schemaPath) {
+    throw new Error(`schema.sql not found in candidate paths: ${candidatePaths.join(", ")}`);
+  }
+
   const schema = await fs.readFile(schemaPath, "utf8");
   const client = await pool.connect();
 

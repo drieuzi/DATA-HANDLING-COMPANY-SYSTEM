@@ -1,5 +1,22 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const USE_DEMO_DATA = import.meta.env.VITE_USE_DEMO_DATA === "true";
+const TOKEN_KEY = "illuminux_token";
+
+export function getStoredToken() {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+}
+
+export function setStoredToken(token) {
+  if (typeof window === "undefined") return;
+  if (token) {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
 
 async function readResponse(response) {
   const result = await response.json().catch(() => ({}));
@@ -29,6 +46,9 @@ export async function login(credentials) {
     body: JSON.stringify(credentials)
   });
   const result = await readResponse(response);
+  if (result.token) {
+    setStoredToken(result.token);
+  }
   return result.user;
 }
 
@@ -38,8 +58,16 @@ export async function getCurrentUser() {
     return saved ? JSON.parse(saved) : null;
   }
 
-  const response = await fetch(`${API_BASE_URL}/auth/me`, { credentials: "include" });
-  if (response.status === 401) return null;
+  const token = getStoredToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    credentials: "include",
+    headers
+  });
+  if (response.status === 401) {
+    setStoredToken(null);
+    return null;
+  }
   const result = await readResponse(response);
   return result.user;
 }
@@ -50,9 +78,13 @@ export async function logout() {
     return;
   }
 
+  const token = getStoredToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  setStoredToken(null);
   const response = await fetch(`${API_BASE_URL}/auth/logout`, {
     method: "POST",
-    credentials: "include"
+    credentials: "include",
+    headers
   });
   if (!response.ok && response.status !== 204) await readResponse(response);
 }

@@ -56,13 +56,17 @@ async function login(request, response, next) {
       process.env.JWT_SECRET,
       { subject: String(account.id), expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
     );
+    const isProduction = process.env.NODE_ENV === "production";
     response.cookie(COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction,
       maxAge: 8 * 60 * 60 * 1000
     });
-    response.json({ user: publicUser(account) });
+    response.json({
+      token,
+      user: publicUser(account)
+    });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -72,10 +76,11 @@ async function login(request, response, next) {
 }
 
 async function logout(request, response, next) {
+  const isProduction = process.env.NODE_ENV === "production";
   response.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production"
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction
   });
   const client = await pool.connect();
   try {

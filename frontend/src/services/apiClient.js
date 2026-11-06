@@ -1,11 +1,15 @@
+import { getStoredToken } from "./authApi.js";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export async function apiRequest(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const token = getStoredToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
     headers: {
       ...(options.body && !isFormData ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     },
     ...options
