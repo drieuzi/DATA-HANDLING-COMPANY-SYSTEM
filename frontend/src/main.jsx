@@ -22,7 +22,7 @@ import "./styles/report-export.css";
 const savedTheme = localStorage.getItem("illuminux-color-theme");
 const initialTheme = savedTheme === "light" || savedTheme === "dark"
   ? savedTheme
-  : window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  : typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
     ? "dark"
     : "light";
 

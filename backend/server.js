@@ -33,6 +33,7 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
   .filter(Boolean);
 
 app.use(helmet({
+  contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
@@ -78,7 +79,12 @@ app.use("/api", notFoundHandler);
 const frontendDist = path.join(__dirname, "../frontend/dist");
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
-  app.use((_request, response) => response.sendFile(path.join(frontendDist, "index.html")));
+  app.use((request, response) => {
+    if (request.path.startsWith("/api") || request.path.startsWith("/assets") || request.path.includes(".")) {
+      return response.status(404).send("Not found");
+    }
+    response.sendFile(path.join(frontendDist, "index.html"));
+  });
 } else {
   app.get("/", (_request, response) => {
     response.json({
