@@ -44,7 +44,8 @@ app.use(cors({
     if (
       allowedOrigins.includes(cleanOrigin) ||
       allowedOrigins.includes("*") ||
-      (cleanOrigin.endsWith(".vercel.app") && allowedOrigins.some((ao) => ao.includes("vercel.app"))) ||
+      cleanOrigin.endsWith(".onrender.com") ||
+      cleanOrigin.endsWith(".vercel.app") ||
       (!isProduction && cleanOrigin.startsWith("http://localhost"))
     ) {
       return callback(null, true);
